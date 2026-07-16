@@ -6,6 +6,7 @@ export class Input {
   constructor(events, uiRoot) {
     this.events = events;
     this.keys = new Set();
+    this.justPressed = new Set();
     this.throttle = 0;
     this.steer = 0;
     /** Absolute heading requested by the joystick, or null on keyboard. */
@@ -14,9 +15,42 @@ export class Input {
     this._touchId = null;
     this._baseX = 0;
     this._baseY = 0;
+    /** Pointer state for boarding combat aiming. */
+    this.pointerX = 0;
+    this.pointerY = 0;
+    this.pointerDown = false;
+    this._pointerClicked = false;
+    /** Virtual button states set by HUD touch buttons (mobile). */
+    this.virtual = {};
 
     this._buildJoystick(uiRoot);
     this._bind();
+  }
+
+  isDown(code) {
+    return this.keys.has(code) || !!this.virtual[code];
+  }
+
+  /** One-shot: true only on the frame the key went down. */
+  pressed(code) {
+    return this.justPressed.has(code);
+  }
+
+  /** HUD buttons feed key-like signals here (e.g. 'KeyF', 'Space'). */
+  pressVirtual(code) {
+    this.justPressed.add(code);
+  }
+
+  consumeClick() {
+    const c = this._pointerClicked;
+    this._pointerClicked = false;
+    return c;
+  }
+
+  /** Clear one-frame state. Call at the END of each game update. */
+  endFrame() {
+    this.justPressed.clear();
+    this._pointerClicked = false;
   }
 
   _buildJoystick(uiRoot) {
@@ -29,18 +63,36 @@ export class Input {
 
   _bind() {
     window.addEventListener('keydown', (e) => {
+      if (e.target.closest && e.target.closest('input, select, textarea')) return;
       if (e.repeat) return;
       if (e.code === 'Escape' || e.code === 'KeyP') {
         this.events.emit('input:pause');
         return;
       }
       this.keys.add(e.code);
+      this.justPressed.add(e.code);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault();
       }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
+
+    // Pointer tracking (aiming + click attacks during boarding).
+    window.addEventListener('pointermove', (e) => {
+      this.pointerX = e.clientX;
+      this.pointerY = e.clientY;
+    });
+    window.addEventListener('pointerdown', (e) => {
+      if (this._isUiTarget(e.target)) return;
+      this.pointerDown = true;
+      this._pointerClicked = true;
+      this.pointerX = e.clientX;
+      this.pointerY = e.clientY;
+    });
+    window.addEventListener('pointerup', () => {
+      this.pointerDown = false;
+    });
 
     // Virtual joystick: touch anywhere on the lower/left play area.
     const opts = { passive: false };
@@ -51,7 +103,7 @@ export class Input {
   }
 
   _isUiTarget(target) {
-    return target.closest && target.closest('.screen, .hud button, .pause-btn');
+    return target.closest && target.closest('.screen, .hud button, .pause-btn, .panel, .hud-btn, .quickbar, .toast');
   }
 
   _touchStart(e) {

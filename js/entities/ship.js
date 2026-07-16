@@ -27,14 +27,36 @@ export class Ship {
     return clamp(Math.abs(this.speed) / SHIP.maxSpeed, 0, 1);
   }
 
+  /** Hull sprite, tinted by the active paint job (Part 2 cosmetics). */
+  _paintedHull() {
+    const base = shipHull();
+    if (!this.paintTint) return base;
+    if (this._tintCache?.tint !== this.paintTint) {
+      const c = document.createElement('canvas');
+      c.width = base.width;
+      c.height = base.height;
+      const g = c.getContext('2d');
+      g.drawImage(base, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = this.paintTint;
+      g.fillRect(0, 0, c.width, c.height);
+      this._tintCache = { tint: this.paintTint, canvas: c };
+    }
+    return this._tintCache.canvas;
+  }
+
   update(dt, input, world, game) {
     this._time += dt;
     const weather = game.weather;
 
+    // Upgrades and sail damage modify performance (Part 2).
+    const speedMult = game.shipState?.speedMult ?? 1;
+    const turnMult = game.shipState?.turnMult ?? 1;
+
     // --- throttle -----------------------------------------------------
     const throttle = clamp(input.throttle, -1, 1);
     if (throttle > 0) {
-      this.speed = Math.min(this.speed + SHIP.accel * dt * throttle, SHIP.maxSpeed * throttle);
+      this.speed = Math.min(this.speed + SHIP.accel * dt * throttle, SHIP.maxSpeed * speedMult * throttle);
     } else if (throttle < 0) {
       this.speed = Math.max(this.speed - SHIP.reverseAccel * dt, -SHIP.reverseSpeed);
     } else {
@@ -52,7 +74,7 @@ export class Ship {
       const diff = angleDiff(this.heading, input.headingTarget);
       steer = clamp(diff * 2.4, -1, 1);
     }
-    this.heading += steer * SHIP.turnRate * effectiveness * dt;
+    this.heading += steer * SHIP.turnRate * turnMult * effectiveness * dt;
     this.heading = ((this.heading % TAU) + TAU) % TAU;
 
     // --- velocity: mostly along the keel, lateral slip damped ------------
@@ -115,7 +137,7 @@ export class Ship {
 
   /** Draw in world space. t = global time for animation frames. */
   draw(g, t, dayNight) {
-    const hull = shipHull();
+    const hull = this._paintedHull();
     // Sail furls at anchor and fills progressively with speed.
     const sail = this.speedNorm < 0.08
       ? shipSailFurled()

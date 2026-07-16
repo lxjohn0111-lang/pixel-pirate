@@ -37,6 +37,11 @@ export class Renderer {
     this.g.imageSmoothingEnabled = false;
   }
 
+  /** Screen pixels per world/backbuffer pixel (for UI coordinate math). */
+  blitScale() {
+    return PIXEL_SCALE * this.game.camera.zoom;
+  }
+
   /** The world-space rect currently covered by the backbuffer. */
   viewRect() {
     const cam = this.game.camera;
@@ -53,6 +58,14 @@ export class Renderer {
     const { world, ship, dayNight, weather, wildlife, collectibles, particles } = game;
     const view = this.viewRect();
     this.water.quality = particles.quality;
+
+    // Boarding combat replaces the world view entirely.
+    if (game.boarding?.active) {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      game.boarding.draw(g, this.buffer.width, this.buffer.height, t);
+      this._blit();
+      return;
+    }
 
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.save();
@@ -97,11 +110,16 @@ export class Renderer {
       }
     });
     wildlife.collectSurfaceDrawables(drawables, t);
+    // Part 2 layers: AI ships, loot drops, encounters, ports.
+    game.combat?.collectSurfaceDrawables(drawables, t);
+    game.encounters?.collectSurfaceDrawables(drawables, t, view.x, view.y, view.w, view.h);
+    game.ports?.collectSurfaceDrawables(drawables, t, view.x, view.y, view.w, view.h);
     drawables.sort((a, b) => a.y - b.y);
     collectibles.draw(g, view.x, view.y, view.w, view.h, t);
     for (const d of drawables) d.draw(g);
 
-    // 6. Foreground particles, floating text, birds
+    // 6. Foreground particles, floating text, birds, cannonballs
+    game.combat?.drawProjectiles(g, t);
     particles.drawLayer(g, 'above');
     particles.drawTexts(g);
     wildlife.drawAir(g, t);
@@ -122,9 +140,12 @@ export class Renderer {
       g.fillRect(0, 0, this.buffer.width, this.buffer.height);
     }
 
-    // Blit backbuffer -> screen with camera zoom.
-    const cam = this.game.camera;
-    const scale = PIXEL_SCALE * cam.zoom;
+    this._blit();
+  }
+
+  /** Blit backbuffer -> screen with camera zoom. */
+  _blit() {
+    const scale = this.blitScale();
     const dw = this.buffer.width * scale;
     const dh = this.buffer.height * scale;
     this.screen.imageSmoothingEnabled = false;

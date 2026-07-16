@@ -4,8 +4,10 @@ An infinite pixel-art pirate sailing adventure. Pure HTML, CSS and JavaScript �
 no frameworks, no build step, no external assets. Every sprite, island and
 sound is generated procedurally at runtime.
 
-**This is Part 1: the foundation.** One customizable pirate, one small wooden
-ship, and an endless mysterious ocean.
+**Part 1** built the foundation: one customizable pirate, one small wooden
+ship, and an endless mysterious ocean. **Part 2** populates that ocean:
+encounters, loot and rarity, a full inventory, combat at sea and on deck,
+crew, ports, contracts and a world map.
 
 ## Running
 
@@ -24,7 +26,14 @@ Then open <http://localhost:8000>.
 | Action | Desktop | Mobile |
 | ------ | ------- | ------ |
 | Sail / steer | `WASD` or arrow keys | drag anywhere (virtual joystick) |
-| Pause | `Esc` or `P` | pause button (top right) |
+| Fire cannons | `Space` | ✕ button |
+| Interact / dock / board | `F` | F button (appears in range) |
+| Inventory / Crew / Ship | `I` (`C` jumps to Crew) | ⚔ button |
+| World map | `M` | 🗺 button |
+| Quick bar | `1`–`4` | tap slot |
+| Boarding: move / attack | `WASD` + click (or `J`) | joystick + 🗡 |
+| Boarding: pistol / musket / dodge | `K` / `L` / `Shift` | 🔫 / 💨 |
+| Pause | `Esc` or `P` | pause button |
 
 ## What's in the foundation
 
@@ -58,6 +67,44 @@ Then open <http://localhost:8000>.
 - **HUD** — compass, gold and wood counters, pause menu with volume and
   effects-quality settings.
 
+## What Part 2 adds
+
+- **World encounters** — shipwrecks (with clinging survivors), supply rafts,
+  message bottles, locked sea chests, drifting castaways, island camps with
+  campfires and hermits, debris fields — all deterministic per chunk and
+  remembered once searched.
+- **Loot & rarity** — 45+ items across resources, consumables, ammo, weapons,
+  armor, trinkets, pets, ship parts, maps, keys, treasure fragments and
+  valuables, in six rarity tiers (Common → Mythic) with colors and glow.
+  Weighted loot tables per container; luck improves rare odds.
+- **Inventory** — drag & drop between backpack, ship hold, nine equipment
+  slots and a quick bar; stacking, sorting, rarity tooltips, double-click to
+  equip/use. No weight.
+- **Player progression** — health, attack, defense, crit, reload speed,
+  movement, luck; XP and levels from fighting, rescuing and questing.
+- **Ships of the world** — fishing boats, sloops, merchants, pirate raiders
+  and navy patrols, with wander/flee/hunt AI. Danger and rewards scale with
+  distance from the spawn.
+- **Naval combat** — broadsides with real travel time, wood splinters,
+  smoke, fire on burning hulls, dramatic sinking, loot bobbing on the water.
+- **Boarding** — pull alongside and fight deck-to-deck in real time: sword
+  arcs, pistols, muskets, dodge-dash, knockback, crits, and your crew
+  fighting (and permanently dying) beside you. Win to empty their hold.
+- **Crew** — rescue, free or hire pirates with names, faces, levels, weapons
+  and traits (Fast Reload, Cook, Coward, Fearless...). They speed up your
+  guns, boost the ship and brawl in boardings.
+- **Ship management** — hull/sail health, repairs (kits, port, slow at-sea
+  patching), six upgrade tracks (hull, cannons, sails, cargo, quarters,
+  rudder) and hull paints.
+- **Ports** — large islands grow named harbors with docks and houses:
+  repair, general store, weapon merchant, black market, shipwright and
+  tavern (hiring + contracts). Stock rotates daily.
+- **Contracts** — procedural quests: cargo runs, pirate bounties, rescues,
+  supply gathering, treasure recovery — tracked with a HUD guide arrow.
+- **Sea chart** — fog-of-war world map with discovered islands, ports,
+  objectives, charted treasure and custom markers (click to place).
+- **Save v2** — everything above persists; Part 1 saves migrate seamlessly.
+
 ## Architecture
 
 ```
@@ -73,12 +120,25 @@ js/
 ├── world/               simulation
 │   ├── world.js         chunk manager + feature-generator registry
 │   ├── island.js        deterministic island shapes, biomes, decor
+│   ├── encounters.js    wrecks, rafts, survivors, camps, treasure
+│   ├── ports.js         procedural harbors on large islands
 │   ├── daynight.js      keyframed day/night color cycle
 │   └── weather.js       blended weather state machine
 ├── entities/
 │   ├── ship.js          player ship physics + drawing
+│   ├── shipstate.js     hull/sails/cannons/upgrades/paint
+│   ├── player.js        stats, XP, levels
+│   ├── aiship.js        merchant/pirate/navy AI ships
 │   ├── collectibles.js  floating loot, magnet pickup, rewards
 │   └── wildlife.js      ambient animals
+├── items/
+│   ├── itemdefs.js      item catalogue, rarity, loot tables, icons
+│   └── inventory.js     containers, equipment, quick bar
+├── combat/
+│   ├── shipcombat.js    broadsides, projectiles, sinking, drops
+│   └── boarding.js      deck-to-deck real-time combat
+├── crew/crew.js         crew members, traits, bonuses
+├── quests/quests.js     procedural contracts
 ├── render/
 │   ├── renderer.js      frame composition, backbuffer, lighting
 │   ├── water.js         the animated ocean field
@@ -91,12 +151,12 @@ js/
 └── util/                seeded random, value noise, math helpers
 ```
 
-### Extension points (for Part 2+)
+### Extension points
 
-Future systems — inventory, combat, enemy ships, crew, NPCs, trading,
-crafting, ship upgrades, quests, sea monsters, fishing, building, skills,
-bosses, events, achievements, statistics — are expected to plug in through
-three seams that already exist and are already used by the current code:
+Part 2 (inventory, combat, ships, crew, ports, quests, map) plugged in
+through exactly the seams Part 1 left — and the final expansion (bosses,
+sea monsters, ghost ships, world events, fishing, building, skills,
+achievements, statistics) is expected to do the same:
 
 1. **`game.registerSystem(system)`** — anything with an `update(dt)` joins
    the simulation loop (wildlife and collectibles already work this way).

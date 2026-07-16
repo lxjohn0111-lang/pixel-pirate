@@ -45,7 +45,7 @@ export class Collectibles {
   }
 
   _collect(item) {
-    const { world, resources, particles, events } = this.game;
+    const { world, resources, particles, events, inventory } = this.game;
     world.collected.add(item.id);
     const gains = REWARDS[item.type](Math.random);
     const labels = [];
@@ -54,8 +54,11 @@ export class Collectibles {
       labels.push([`+${gains.coins} gold`, '#f2d98a']);
     }
     if (gains.wood) {
-      resources.wood += gains.wood;
-      labels.push([`+${gains.wood} wood`, '#d9b98a']);
+      // Wood is a real inventory item since Part 2.
+      const left = inventory ? inventory.addAnywhere('wood', gains.wood) : 0;
+      const got = gains.wood - left;
+      if (got > 0) labels.push([`+${got} wood`, '#d9b98a']);
+      else if (left > 0) labels.push(['Hold is full!', '#e05a4a']);
     }
     labels.forEach(([text, color], i) => particles.spawnText(item.x, item.y - 10 - i * 10, text, color));
     particles.burstCollect(

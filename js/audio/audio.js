@@ -227,8 +227,120 @@ export class AudioManager {
         this._thump(46, 1.2, t + 0.05, 0.3);
         break;
       }
-      case 'ui': {
+      case 'ui':
+      case 'click': {
         this._blip(660, 0.05, t, 'square', 0.05);
+        break;
+      }
+      /* ---- Part 2: combat & interface -------------------------------- */
+      case 'cannon': {
+        this._noiseBurst(180, 0.5, t, 0.5, 'lowpass');
+        this._thump(60, 0.4, t, 0.5);
+        this._noiseBurst(1200, 0.08, t, 0.12);
+        break;
+      }
+      case 'cannonFar': {
+        this._noiseBurst(140, 0.45, t, 0.22, 'lowpass');
+        this._thump(52, 0.35, t, 0.2);
+        break;
+      }
+      case 'woodhit': {
+        this._thump(110, 0.16, t, 0.4);
+        this._noiseBurst(900, 0.12, t, 0.2);
+        this._noiseBurst(400, 0.2, t + 0.02, 0.15, 'lowpass');
+        break;
+      }
+      case 'splash': {
+        this._noiseBurst(2400, 0.22, t, 0.14, 'highpass');
+        this._noiseBurst(700, 0.14, t, 0.1);
+        break;
+      }
+      case 'sink': {
+        this._noiseBurst(300, 1.4, t, 0.3, 'lowpass');
+        this._thump(80, 1, t, 0.3);
+        [220, 180, 140].forEach((f, i) => this._blip(f, 0.3, t + i * 0.3, 'sine', 0.08));
+        break;
+      }
+      case 'swing': {
+        this._noiseBurst(2600, 0.09, t, 0.08, 'bandpass');
+        break;
+      }
+      case 'hit': {
+        this._thump(180, 0.1, t, 0.24);
+        this._noiseBurst(1600, 0.06, t, 0.1);
+        break;
+      }
+      case 'crit': {
+        this._thump(140, 0.14, t, 0.34);
+        this._blip(880, 0.08, t, 'square', 0.08);
+        this._noiseBurst(2000, 0.09, t, 0.14);
+        break;
+      }
+      case 'death': {
+        this._thump(90, 0.3, t, 0.3);
+        this._blip(160, 0.25, t + 0.05, 'sawtooth', 0.05);
+        break;
+      }
+      case 'pistol': {
+        this._noiseBurst(1400, 0.12, t, 0.3);
+        this._thump(150, 0.1, t, 0.25);
+        break;
+      }
+      case 'pistolFar': {
+        this._noiseBurst(1000, 0.1, t, 0.12);
+        break;
+      }
+      case 'musket': {
+        this._noiseBurst(900, 0.2, t, 0.4, 'lowpass');
+        this._noiseBurst(2400, 0.08, t, 0.2);
+        this._thump(100, 0.18, t, 0.3);
+        break;
+      }
+      case 'dash': {
+        this._noiseBurst(3200, 0.12, t, 0.1, 'highpass');
+        break;
+      }
+      case 'boarding': {
+        this._thump(70, 0.5, t, 0.4);
+        [392, 466, 587].forEach((f, i) => this._blip(f, 0.2, t + i * 0.12, 'square', 0.06));
+        break;
+      }
+      case 'victory': {
+        [523, 659, 784, 1047].forEach((f, i) => this._blip(f, 0.22, t + i * 0.11, 'triangle', 0.12));
+        break;
+      }
+      case 'levelup': {
+        [440, 554, 659, 880].forEach((f, i) => this._blip(f, 0.25, t + i * 0.09, 'triangle', 0.13));
+        break;
+      }
+      case 'quest': {
+        this._blip(659, 0.12, t, 'triangle', 0.12);
+        this._blip(988, 0.2, t + 0.12, 'triangle', 0.12);
+        break;
+      }
+      case 'recruit': {
+        [392, 494, 587].forEach((f, i) => this._blip(f, 0.15, t + i * 0.09, 'triangle', 0.1));
+        break;
+      }
+      case 'equip': {
+        this._noiseBurst(1800, 0.06, t, 0.1);
+        this._blip(440, 0.08, t + 0.03, 'square', 0.06);
+        break;
+      }
+      case 'buy': {
+        this._blip(784, 0.06, t, 'sine', 0.1);
+        this._blip(1046, 0.1, t + 0.07, 'sine', 0.1);
+        break;
+      }
+      case 'repair': {
+        this._thump(160, 0.08, t, 0.18);
+        this._thump(200, 0.08, t + 0.14, 0.18);
+        this._blip(660, 0.1, t + 0.3, 'triangle', 0.08);
+        break;
+      }
+      case 'upgrade': {
+        this._thump(140, 0.1, t, 0.2);
+        [523, 659, 784].forEach((f, i) => this._blip(f, 0.16, t + 0.1 + i * 0.08, 'triangle', 0.1));
         break;
       }
     }

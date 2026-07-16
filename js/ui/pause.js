@@ -47,7 +47,7 @@ export class PauseMenu {
     this.el.querySelector('.pause-info').innerHTML =
       `Day ${dayNight.day} &middot; ${phase[0].toUpperCase() + phase.slice(1)} &middot; ` +
       `${weather.kind[0].toUpperCase() + weather.kind.slice(1)}<br>` +
-      `${resources.coins} gold &middot; ${resources.wood} wood &middot; seed ${world.seed}`;
+      `${resources.coins} gold &middot; Level ${this.game.player?.level ?? 1} &middot; seed ${world.seed}`;
     this.el.classList.remove('hidden');
   }
 

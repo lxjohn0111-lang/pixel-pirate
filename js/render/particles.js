@@ -188,3 +188,82 @@ export class Particles {
     g.textAlign = 'left';
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Part 2: combat particle spawners (smoke, fire, splinters)           */
+/* ------------------------------------------------------------------ */
+
+Particles.prototype.spawnSmoke = function (x, y, big = false) {
+  const n = Math.round((big ? 5 : 2) * this.quality) || 1;
+  for (let i = 0; i < n; i++) {
+    this._push('above', {
+      kind: 'dot',
+      x: x + (Math.random() - 0.5) * 4,
+      y: y + (Math.random() - 0.5) * 4,
+      vx: (Math.random() - 0.5) * 14,
+      vy: -8 - Math.random() * 10,
+      life: 0.9 + Math.random() * 0.8,
+      size: big ? 3 : 2,
+      growth: 4,
+      color: '190,190,200',
+      alpha: 0.45,
+      drag: 1.2,
+    });
+  }
+};
+
+Particles.prototype.spawnFlame = function (x, y) {
+  this._push('above', {
+    kind: 'dot',
+    x, y,
+    vx: (Math.random() - 0.5) * 8,
+    vy: -14 - Math.random() * 10,
+    life: 0.4 + Math.random() * 0.3,
+    size: 1 + Math.random() * 2,
+    growth: -1.5,
+    color: Math.random() < 0.5 ? '240,160,60' : '224,90,60',
+    alpha: 0.9,
+    drag: 0.8,
+  });
+  if (Math.random() < 0.3) this.spawnSmoke(x, y - 4);
+};
+
+Particles.prototype.burstSplinters = function (x, y, count = 8) {
+  for (let i = 0; i < count * this.quality; i++) {
+    const a = Math.random() * TAU;
+    const s = 25 + Math.random() * 55;
+    this._push('above', {
+      kind: 'dot',
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s - 20,
+      life: 0.4 + Math.random() * 0.5,
+      size: 1 + (Math.random() < 0.4 ? 1 : 0),
+      growth: 0,
+      color: Math.random() < 0.5 ? '138,95,56' : '90,58,32',
+      alpha: 1,
+      drag: 2.4,
+    });
+  }
+  this.spawnSmoke(x, y, true);
+};
+
+Particles.prototype.burstBlood = function (x, y, count = 5) {
+  // Keep it pirate-y: dark red pixels, quick fade.
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * TAU;
+    const s = 20 + Math.random() * 30;
+    this._push('above', {
+      kind: 'dot',
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      life: 0.25 + Math.random() * 0.25,
+      size: 1,
+      growth: 0,
+      color: '142,47,47',
+      alpha: 0.9,
+      drag: 3,
+    });
+  }
+};
