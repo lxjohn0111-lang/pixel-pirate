@@ -38,6 +38,21 @@ import { LootUI } from '../ui/lootUI.js';
 import { rollLoot } from '../items/itemdefs.js';
 import { mulberry32 } from '../util/random.js';
 import { dist2 } from '../util/math.js';
+// Part 3
+import { Factions } from '../world/factions.js';
+import { Stats } from '../meta/stats.js';
+import { Collection } from '../meta/collection.js';
+import { Achievements } from '../meta/achievements.js';
+import { Daily } from '../meta/daily.js';
+import { Cosmetics, SAILS, FLAGS, FIGUREHEADS, LANTERNS } from '../meta/cosmetics.js';
+import { WorldEvents } from '../world/events.js';
+import { Legends } from '../world/legends.js';
+import { Dungeon } from '../world/dungeons.js';
+import { Fishing } from '../systems/fishing.js';
+import { TreasureHunts } from '../systems/treasurehunt.js';
+import { Homestead } from '../world/homestead.js';
+import { LogUI } from '../ui/logUI.js';
+import { HomeUI } from '../ui/homeUI.js';
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -109,6 +124,23 @@ export class Game {
     this.boarding = new Boarding(this);
     this.quests = new Quests(this, save?.quests);
 
+    // ---- Part 3: the living, remembering world ---------------------------
+    this.prestige = save?.prestige ?? 0;
+    this.factions = new Factions(this, save?.factions);
+    this.stats = new Stats(this, save?.stats);
+    this.cosmetics = new Cosmetics(this, save?.cosmetics);
+    this.cosmeticsDefs = { SAILS, FLAGS, FIGUREHEADS, LANTERNS };
+    this.collection = new Collection(this, save?.collection);
+    this.achievements = new Achievements(this, save?.achievements);
+    this.daily = new Daily(this, save?.daily);
+    this.homestead = new Homestead(this, save?.homestead);
+    this.worldEvents = this.registerSystem(new WorldEvents(this));
+    this.legends = this.registerSystem(new Legends(this, save?.legends));
+    this.dungeon = new Dungeon(this);
+    this.fishing = this.registerSystem(new Fishing(this));
+    this.treasureHunts = new TreasureHunts(this, save?.treasureHunts);
+    if (this.prestige > 0) this.cosmetics.unlock('flag', 'legend');
+
     // First voyage: a captain needs the basics.
     if (!save?.inventory) {
       this.inventory.equip('rustyCutlass');
@@ -132,7 +164,14 @@ export class Game {
     this.portUI = new PortUI(this.uiRoot, this);
     this.mapUI = new MapUI(this.uiRoot, this);
     this.lootUI = new LootUI(this.uiRoot, this);
+    this.logUI = new LogUI(this.uiRoot, this);
+    this.homeUI = new HomeUI(this.uiRoot, this);
     this._applyPaint();
+
+    // Give returning captains their fishing rod; the sea provides.
+    if (this.inventory.totalCount('fishingRod') === 0) {
+      this.inventory.addAnywhere('fishingRod', 1);
+    }
 
     this.events.on('input:pause', () => this.togglePause());
     this.events.on('settings:changed', () => {
@@ -176,17 +215,82 @@ export class Game {
 
   /** True while a blocking dialog is up (loot, port, recruit...). */
   get uiBlocked() {
-    return this.lootUI?.isOpen || this.portUI?.isOpen;
+    return this.lootUI?.isOpen || this.portUI?.isOpen || this.homeUI?.isOpen;
+  }
+
+  /** Where the equipped relic points (Golden Compass / Treasure Locator). */
+  relicTarget() {
+    const relic = this.inventory?.equipment?.relic;
+    if (relic === 'goldenCompass') {
+      let best = null;
+      let bestD = 900 * 900;
+      this.world.forEachChunkIn(this.ship.x - 900, this.ship.y - 900, 1800, 1800, (chunk) => {
+        for (const e of chunk.encounters ?? []) {
+          if (e.searched) continue;
+          const d = dist2(e.x, e.y, this.ship.x, this.ship.y);
+          if (d < bestD && d > 90 * 90) {
+            bestD = d;
+            best = e;
+          }
+        }
+      });
+      return best;
+    }
+    if (relic === 'treasureLocator') {
+      let best = null;
+      let bestD = 700 * 700;
+      for (const d of this.combat.drops) {
+        const dd = dist2(d.x, d.y, this.ship.x, this.ship.y);
+        if (dd < bestD) {
+          bestD = dd;
+          best = d;
+        }
+      }
+      for (const tr of this.encounters.treasures) {
+        const dd = dist2(tr.x, tr.y, this.ship.x, this.ship.y);
+        if (dd < bestD) {
+          bestD = dd;
+          best = tr;
+        }
+      }
+      return best;
+    }
+    return null;
+  }
+
+  /** Retire into Legend: the prestige loop. */
+  doPrestige() {
+    if (this.player.level < 20) return false;
+    this.prestige++;
+    this.player.level = 1;
+    this.player.xp = 0;
+    this.player.recompute();
+    this.player.health = this.player.maxHealth;
+    this.cosmetics.unlock('flag', 'legend');
+    this.events.emit('player:changed');
+    this.events.emit('sfx', 'victory');
+    this.hud.toast(`You retire into Legend — rank ${this.prestige}. The sea remembers.`, '#f0a83c');
+    this.save();
+    return true;
   }
 
   _applyPaint() {
     this.ship.paintTint = PAINTS.find((p) => p.id === this.shipState.paint)?.tint ?? null;
   }
 
-  /** Keep the hull tint in sync with the chosen paint (cheap, per frame). */
+  /** Keep hull paint and Part 3 cosmetics in sync (cheap, per frame). */
   _syncPaint() {
     const tint = PAINTS.find((p) => p.id === this.shipState.paint)?.tint ?? null;
     if (tint !== this.ship.paintTint) this.ship.paintTint = tint;
+    const eq = this.cosmetics.equipped;
+    const sail = SAILS[eq.sail];
+    this.ship.sailStyle = sail && (sail.tint || sail.mark) ? { id: eq.sail, tint: sail.tint, mark: sail.mark } : null;
+    const flag = FLAGS[eq.flag];
+    this.ship.flagStyle = eq.flag !== 'black' && flag ? { id: eq.flag, body: flag.body, mark: flag.mark } : null;
+    this.ship.figurehead = eq.figurehead;
+    this.ship.lanternColor = LANTERNS[eq.lantern]?.color ?? null;
+    const charm = this.inventory.equipment.charm;
+    this.ship.petId = charm === 'parrot' || charm === 'monkey' ? charm : null;
   }
 
   /** Add rolled loot to the player with full feedback. */
@@ -268,6 +372,9 @@ export class Game {
     } else if (def.use === 'message') {
       this.inventory.removeAnywhere(id, 1);
       this.encounters._openBottle(mulberry32((Math.random() * 0xffffffff) >>> 0));
+    } else if (def.use === 'expedition') {
+      if (!this.treasureHunts.begin()) return false;
+      this.inventory.removeAnywhere(id, 1);
     } else {
       return false;
     }
@@ -312,7 +419,7 @@ export class Game {
 
   togglePause() {
     // Escape first closes any open panel.
-    for (const panel of [this.lootUI, this.portUI, this.mapUI, this.inventoryUI]) {
+    for (const panel of [this.lootUI, this.portUI, this.mapUI, this.inventoryUI, this.logUI, this.homeUI]) {
       if (panel?.isOpen) {
         panel.close();
         return;
@@ -362,10 +469,11 @@ export class Game {
   _update(dt) {
     this.input.update();
 
-    // Boarding combat freezes the outside world.
-    if (this.boarding.active) {
-      this.boarding.update(dt);
+    // Boarding combat / dungeon crawls freeze the outside world.
+    if (this.boarding.active || this.dungeon.active) {
+      (this.boarding.active ? this.boarding : this.dungeon).update(dt);
       this.audio.update(dt);
+      this.stats.data.timePlayed += dt;
       this.input.endFrame();
       return;
     }
@@ -381,9 +489,33 @@ export class Game {
     for (const system of this.systems) system.update(dt);
     this.encounters.update(dt);
     this.quests.update(dt);
+    this.treasureHunts.update();
+    this.stats.update(dt);
+    this.achievements.update(dt);
+    this.daily.update();
     this.particles.update(dt);
     this.camera.update(dt, this.ship);
     this.audio.update(dt);
+
+    // boss music kicks in when a legend is loose
+    const wantMode = this.legends.activeBoss ? 'boss' : 'normal';
+    if (this.audio.musicMode !== wantMode) this.audio.setMusicMode(wantMode);
+
+    // prestige + daily modifiers feed player luck
+    const bonusLuck = this.prestige + (this.daily.modifier.luck ?? 0);
+    if (this.player.bonusLuck !== bonusLuck) {
+      this.player.bonusLuck = bonusLuck;
+      this.player.recompute();
+    }
+
+    // the Living Coral Heart knits flesh like the tide mends sand
+    if (this.shipState.relic === 'coralHeart') {
+      this._coralTimer = (this._coralTimer ?? 0) - dt;
+      if (this._coralTimer <= 0 && this.player.health < this.player.maxHealth) {
+        this._coralTimer = 4;
+        this.player.heal(2);
+      }
+    }
 
     this._updateInteractions();
     this._updateDiscovery(dt);
@@ -393,6 +525,7 @@ export class Game {
     // Panel hotkeys.
     if (this.input.pressed('KeyI')) this.inventoryUI.toggle();
     if (this.input.pressed('KeyM')) this.mapUI.toggle();
+    if (this.input.pressed('KeyL')) this.logUI.toggle();
     if (this.input.pressed('KeyC')) this.inventoryUI.isOpen ? this.inventoryUI.close() : this.inventoryUI.open('crew');
     for (let i = 0; i < 4; i++) {
       if (this.input.pressed(`Digit${i + 1}`)) this.useQuickbar(i);
@@ -415,17 +548,23 @@ export class Game {
     const touch = 'ontouchstart' in window;
     const key = touch ? 'tap F' : 'F';
     const port = this.ports.findNearby();
-    const boardTarget = port ? null : this.combat.boardingTarget();
-    const enc = port || boardTarget ? null : this.encounters.findInteractable();
+    const home = !port && this.homestead.isNear() ? this.homestead : null;
+    const boardTarget = port || home ? null : this.combat.boardingTarget();
+    const wonder = port || home || boardTarget ? null : this.legends.findInteractable();
+    const enc = port || home || boardTarget || wonder ? null : this.encounters.findInteractable();
 
     if (port) this.hud.showPrompt(`${key} — Dock at ${port.name}`);
+    else if (home) this.hud.showPrompt(`${key} — Step ashore at ${this.homestead.isle.name}`);
     else if (boardTarget) this.hud.showPrompt(`${key} — Board the ${boardTarget.label}`);
+    else if (wonder) this.hud.showPrompt(`${key} — ${this.legends.promptFor(wonder)}`);
     else if (enc) this.hud.showPrompt(`${key} — ${this.encounters.promptFor(enc)}`);
     else this.hud.hidePrompt();
 
     if (this.input.pressed('KeyF')) {
       if (port) this.portUI.open(port);
+      else if (home) this.homeUI.open();
       else if (boardTarget) this.boarding.start(boardTarget);
+      else if (wonder) this.legends.interactWonder(wonder);
       else if (enc) this.encounters.interact(enc);
     }
   }
@@ -449,13 +588,33 @@ export class Game {
           const kkey = `${chunk.cx},${chunk.cy}`;
           if (!this.mapData.islands.some((i) => i.key === kkey)) {
             this.mapData.islands.push({ key: kkey, x: isl.x, y: isl.y, r: isl.r, biome: isl.biome });
+            this.collection.discover('locations', `biome:${isl.biome}`);
+            if (isl.biome === 'coral') this.collection.discover('plants', 'coral');
           }
           if (chunk.port && !this.mapData.ports.some((p) => p.name === chunk.port.name)) {
             this.mapData.ports.push({ name: chunk.port.name, x: chunk.port.x, y: chunk.port.y, seed: chunk.port.seed });
             this.hud.toast(`Discovered ${chunk.port.name}!`, '#c8cdd2');
             this.events.emit('sfx', 'quest');
+            this.collection.discover('locations', 'port');
+          }
+          // island flora enters the collection when seen up close
+          if (dist2(isl.x, isl.y, this.ship.x, this.ship.y) < 400 * 400) {
+            for (const d of isl.decor) {
+              if (d.type === 'palm' || d.type === 'tree' || d.type === 'shrub') {
+                this.collection.discover('plants', d.type);
+              }
+            }
           }
         }
+      }
+      if (chunk.seaweed?.length && dist2(chunk.x, chunk.y, this.ship.x, this.ship.y) < 500 * 500) {
+        this.collection.discover('plants', 'seaweed');
+      }
+    }
+    // wildlife sightings
+    for (const a of this.wildlife.animals) {
+      if (dist2(a.x, a.y, this.ship.x, this.ship.y) < 260 * 260) {
+        this.collection.discover('animals', a.type === 'fish' ? 'fishschool' : a.type);
       }
     }
   }
@@ -499,6 +658,17 @@ export class Game {
       quests: this.quests.serialize(),
       treasures: this.encounters.serialize(),
       portHired: this.portHired,
+      // Part 3
+      prestige: this.prestige,
+      factions: this.factions.serialize(),
+      stats: this.stats.serialize(),
+      collection: this.collection.serialize(),
+      achievements: this.achievements.serialize(),
+      daily: this.daily.serialize(),
+      cosmetics: this.cosmetics.serialize(),
+      homestead: this.homestead.serialize(),
+      legends: this.legends.serialize(),
+      treasureHunts: this.treasureHunts.serialize(),
       mapData: {
         explored: [...this.mapData.explored],
         islands: this.mapData.islands,

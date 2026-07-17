@@ -28,12 +28,19 @@ export class HUD {
         <button class="pause-btn hud-btn" aria-label="Pause">II</button>
         <button class="hud-btn bag-btn" aria-label="Inventory (I)">⚔</button>
         <button class="hud-btn map-btn" aria-label="Map (M)">🗺</button>
+        <button class="hud-btn log-btn" aria-label="Captain's Log (L)">📖</button>
+        ${touch ? '<button class="hud-btn fish-btn" aria-label="Fish (R)">🎣</button>' : ''}
       </div>
       <div class="compass">
         <span class="compass-n">N</span><span class="compass-e">E</span>
         <span class="compass-s">S</span><span class="compass-w">W</span>
         <div class="compass-needle"></div>
         <div class="quest-arrow hidden"></div>
+        <div class="quest-arrow relic-arrow hidden"></div>
+      </div>
+      <div class="boss-bar hidden">
+        <div class="boss-name"></div>
+        <div class="boss-hp"><div class="fill"></div></div>
       </div>
       <div class="quickbar"></div>
       <div class="interact-prompt hidden"></div>
@@ -56,7 +63,11 @@ export class HUD {
     this.coinsEl = this.el.querySelector('#hud-coins span');
     this.woodEl = this.el.querySelector('#hud-wood span');
     this.needle = this.el.querySelector('.compass-needle');
-    this.questArrow = this.el.querySelector('.quest-arrow');
+    this.questArrow = this.el.querySelector('.quest-arrow:not(.relic-arrow)');
+    this.relicArrow = this.el.querySelector('.relic-arrow');
+    this.bossBar = this.el.querySelector('.boss-bar');
+    this.bossName = this.el.querySelector('.boss-name');
+    this.bossFill = this.el.querySelector('.boss-hp .fill');
     this.hint = this.el.querySelector('.hint');
     this.prompt = this.el.querySelector('.interact-prompt');
     this.toastsEl = this.el.querySelector('.toasts');
@@ -72,6 +83,8 @@ export class HUD {
     this.el.querySelector('.pause-btn').addEventListener('click', () => game.events.emit('input:pause'));
     this.el.querySelector('.bag-btn').addEventListener('click', () => game.inventoryUI.toggle());
     this.el.querySelector('.map-btn').addEventListener('click', () => game.mapUI.toggle());
+    this.el.querySelector('.log-btn').addEventListener('click', () => game.logUI.toggle());
+    this.el.querySelector('.fish-btn')?.addEventListener('pointerdown', () => game.input.pressVirtual('KeyR'));
     this.el.querySelector('.fire-btn')?.addEventListener('pointerdown', () => game.input.pressVirtual('Space'));
     this.el.querySelector('.interact-btn')?.addEventListener('pointerdown', () => game.input.pressVirtual('KeyF'));
     this.el.querySelector('.sword-tbtn')?.addEventListener('pointerdown', () => game.input.pressVirtual('SwordBtn'));
@@ -177,6 +190,27 @@ export class HUD {
       this.questArrow.style.transform = `translate(-50%,-50%) rotate(${(a * 180) / Math.PI + 90}deg)`;
     } else {
       this.questArrow.classList.add('hidden');
+    }
+
+    // relic senses: Golden Compass points to the unfound; the Treasure
+    // Locator trembles toward unopened riches.
+    const target = game.relicTarget?.();
+    if (target) {
+      const a = Math.atan2(target.y - game.ship.y, target.x - game.ship.x);
+      this.relicArrow.classList.remove('hidden');
+      this.relicArrow.style.transform = `translate(-50%,-50%) rotate(${(a * 180) / Math.PI + 90}deg)`;
+    } else {
+      this.relicArrow.classList.add('hidden');
+    }
+
+    // legend health bar
+    const boss = game.legends?.activeBoss;
+    if (boss) {
+      this.bossBar.classList.remove('hidden');
+      this.bossName.textContent = `${boss.name} — Phase ${boss.phase}`;
+      this.bossFill.style.width = `${Math.max(0, (boss.hp / boss.max) * 100)}%`;
+    } else {
+      this.bossBar.classList.add('hidden');
     }
   }
 

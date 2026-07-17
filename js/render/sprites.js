@@ -350,6 +350,8 @@ const SHIP_STYLES = {
   merchant: { w: 58, h: 38, hull: '#96703f', deck: '#c9a06a', sail: '#f0e8d8', trim: '#6e4a2a' },
   pirate:   { w: 52, h: 34, hull: '#5a4632', deck: '#8a6f4a', sail: '#4a4a52', trim: '#3a2b1e' },
   navy:     { w: 60, h: 38, hull: '#7a5a34', deck: '#c9b284', sail: '#eef2f4', trim: '#3a4e8e' },
+  ghost:    { w: 56, h: 36, hull: '#3a5e56', deck: '#5a8a7c', sail: '#a8e0c8', trim: '#1e3a34' },
+  duchess:  { w: 72, h: 44, hull: '#2e4a44', deck: '#4a7268', sail: '#8ad0b4', trim: '#142a26' },
 };
 
 /** Generic AI ship hull, pointing +x, in the same style as the player's. */
@@ -604,6 +606,89 @@ export function lockedChestSprite() {
     g.fillRect(4, 3, 5, 5);
     g.fillStyle = '#26202a';
     g.fillRect(6, 5, 1, 2);
+    return c;
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Part 3: cosmetic flags & figureheads                                */
+/* ------------------------------------------------------------------ */
+
+/** Pennant flag in custom colors, with an optional skull mark. */
+export function styledFlag(frame, flagId, body, mark) {
+  return sprite(`flag:${flagId}:${frame}`, () => {
+    const c = makeCanvas(10, 6);
+    const g = c.getContext('2d');
+    g.fillStyle = body;
+    for (let x = 0; x < 8; x++) {
+      const wave = Math.round(Math.sin(x * 0.9 + frame * 2.1) * 1.2);
+      g.fillRect(x, 2 + wave - (x > 4 ? 0 : 1), 1, 3);
+    }
+    g.fillStyle = mark;
+    const my = 2 + Math.round(Math.sin(2 * 0.9 + frame * 2.1));
+    if (flagId === 'skull' || flagId === 'scourge' || flagId === 'kraken') {
+      g.fillRect(2, my, 2, 1);
+      g.fillRect(1, my + 1, 1, 1);
+      g.fillRect(4, my + 1, 1, 1);
+    } else if (flagId === 'legend') {
+      g.fillRect(2, my - 1, 1, 1);
+      g.fillRect(3, my, 1, 1);
+      g.fillRect(2, my + 1, 1, 1);
+      g.fillRect(1, my, 1, 1);
+    } else {
+      g.fillRect(2, my, 2, 1);
+    }
+    return c;
+  });
+}
+
+/** Bow figurehead, drawn pointing +x (fitted at the bowsprit). */
+export function figureheadSprite(id) {
+  return sprite(`fig:${id}`, () => {
+    const c = makeCanvas(8, 8);
+    const g = c.getContext('2d');
+    const p = (x, y, w, h, col) => {
+      g.fillStyle = col;
+      g.fillRect(x, y, w, h);
+    };
+    switch (id) {
+      case 'swan':
+        p(1, 3, 4, 3, '#eef2f4');
+        p(4, 1, 2, 3, '#eef2f4');
+        p(6, 1, 2, 2, '#e0b345');
+        break;
+      case 'skull':
+        p(2, 2, 4, 4, '#e8e4da');
+        p(3, 3, 1, 1, '#1e1a22');
+        p(5, 3, 1, 1, '#1e1a22');
+        p(3, 5, 3, 1, '#c8c4ba');
+        break;
+      case 'mermaid':
+        p(1, 4, 4, 2, '#2e8e7e');
+        p(4, 2, 3, 3, '#e0b48a');
+        p(4, 1, 3, 1, '#b5502a');
+        break;
+      case 'dragon':
+        p(1, 3, 4, 3, '#5d7a2e');
+        p(4, 1, 3, 4, '#6e8e3a');
+        p(6, 2, 2, 1, '#e05a3c');
+        p(5, 2, 1, 1, '#f0d040');
+        break;
+      case 'kraken':
+        p(2, 2, 4, 4, '#54407a');
+        p(1, 5, 2, 2, '#3a2a52');
+        p(5, 5, 2, 2, '#3a2a52');
+        p(3, 3, 1, 1, '#f0d040');
+        break;
+      case 'leviathan':
+        p(1, 3, 5, 3, '#2e6e64');
+        p(5, 1, 3, 4, '#4ec9b0');
+        p(6, 2, 1, 1, '#f0d040');
+        p(2, 2, 1, 1, '#4ec9b0');
+        break;
+      default:
+        break;
+    }
     return c;
   });
 }

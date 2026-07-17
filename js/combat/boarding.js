@@ -66,6 +66,7 @@ export class Boarding {
     const lvl = 1 + aiShip.tier;
     for (let i = 0; i < aiShip.crewCount; i++) {
       const shooter = Math.random() < 0.3;
+      game.collection?.discover('foes', shooter ? 'marksman' : 'brawler');
       this.actors.push(this._actor({
         kind: 'enemy',
         x: DECK.x1 - 14 - Math.random() * 30,
@@ -104,7 +105,6 @@ export class Boarding {
   /* ------------------------------------------------------------------ */
 
   update(dt) {
-    const { game } = this;
     this.timer += dt;
     if (this.banner > 0) {
       this.banner -= dt;
@@ -115,16 +115,23 @@ export class Boarding {
       if (this.endTimer <= 0) this._finish();
       return;
     }
+    this._updateCombat(dt);
+    this._checkOutcome();
+  }
 
+  /** Shared actor simulation (also used by dungeons). */
+  _updateCombat(dt) {
+    const { game } = this;
     this._updatePlayer(dt);
     for (const a of this.actors) {
       if (a === this.player) continue;
       this._updateNpc(a, dt);
     }
     // shared physics: knockback, clamping, death fade
+    const b = this.bounds ?? DECK;
     for (const a of this.actors) {
-      a.x = clamp(a.x + a.kx * dt, DECK.x0 + 4, DECK.x1 - 4);
-      a.y = clamp(a.y + a.ky * dt, DECK.y0 + 4, DECK.y1 - 4);
+      a.x = clamp(a.x + a.kx * dt, b.x0 + 4, b.x1 - 4);
+      a.y = clamp(a.y + a.ky * dt, b.y0 + 4, b.y1 - 4);
       const k = Math.exp(-8 * dt);
       a.kx *= k;
       a.ky *= k;
@@ -136,13 +143,15 @@ export class Boarding {
       if (this.effects[i].t <= 0) this.effects.splice(i, 1);
     }
     game.particles.update(dt);
+  }
 
-    // win/lose checks
+  /** Win/lose evaluation — overridable (dungeons chain rooms). */
+  _checkOutcome() {
     const enemiesLeft = this.actors.some((a) => a.kind === 'enemy' && !a.dead);
     if (!enemiesLeft) {
       this.outcome = 'win';
       this.endTimer = 1.2;
-      game.events.emit('sfx', 'victory');
+      this.game.events.emit('sfx', 'victory');
     } else if (this.player.dead) {
       this.outcome = 'loss';
       this.endTimer = 1.6;
@@ -500,12 +509,14 @@ export class Boarding {
   _drawActor(g, a) {
     const alpha = a.dead ? Math.max(0, 1 - a.deathT / 1.2) : 1;
     if (alpha <= 0) return;
+    const w = a.isGuardian ? 16 : 8;
+    const h = a.isGuardian ? 20 : 11;
     g.save();
     g.globalAlpha = alpha;
     g.translate(Math.round(a.x), Math.round(a.y));
     // shadow
     g.fillStyle = 'rgba(20,14,8,0.3)';
-    g.fillRect(-4, -1, 8, 2);
+    g.fillRect(-w / 2, -1, w, 2);
     const bob = a.dead ? 0 : Math.round(Math.sin(this.timer * 8 + a.x) * 0.5);
     g.save();
     if (a.dead) {
@@ -513,13 +524,13 @@ export class Boarding {
       g.translate(-4, 2);
     }
     if (a.facing < 0) g.scale(-1, 1);
-    g.drawImage(a.sprite, -4, -11 + bob, 8, 11);
+    g.drawImage(a.sprite, -w / 2, -h + bob, w, h);
     g.restore();
     // hit flash
     if (a.hitFlash > 0.4) {
       g.globalAlpha = alpha * (a.hitFlash - 0.4);
       g.fillStyle = '#ffffff';
-      g.fillRect(-4, -11, 8, 11);
+      g.fillRect(-w / 2, -h, w, h);
     }
     g.globalAlpha = alpha;
     // health bar (not for the player: HUD shows theirs)

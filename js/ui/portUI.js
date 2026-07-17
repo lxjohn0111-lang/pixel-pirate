@@ -12,7 +12,7 @@ import { MAX_ACTIVE } from '../quests/quests.js';
 const SHOPS = {
   general:  { name: 'General Store', pool: ['wood', 'stone', 'iron', 'cloth', 'food', 'rum', 'repairKit', 'cannonball', 'bullets', 'gunpowder', 'strawHat', 'sailorCoat', 'deckBoots', 'hullPlanks'] },
   weapons:  { name: 'Weapon Merchant', pool: ['rustyCutlass', 'cutlass', 'flintlock', 'musket', 'officerSaber', 'duelPistol', 'tricornHat', 'leatherCoat', 'navalCoat', 'buccaneerBoots', 'bullets', 'gunpowder', 'cannonBarrel'] },
-  black:    { name: 'Black Market', pool: ['rustyKey', 'treasureMap', 'fineRum', 'signetRing', 'boneCharm', 'sharkTooth', 'pearlNecklace', 'monkey', 'spyglass', 'corsairBlade', 'dragonPistol', 'longRifle', 'captainsHat', 'silkSails', 'parrot'] },
+  black:    { name: 'Black Market', pool: ['rustyKey', 'treasureMap', 'weatheredChart', 'fineRum', 'signetRing', 'boneCharm', 'sharkTooth', 'pearlNecklace', 'monkey', 'spyglass', 'corsairBlade', 'dragonPistol', 'longRifle', 'captainsHat', 'silkSails', 'parrot'] },
 };
 
 export class PortUI {
@@ -49,7 +49,7 @@ export class PortUI {
   }
 
   render() {
-    const tabs = [['harbor', 'Harbor'], ['general', 'Store'], ['weapons', 'Weapons'], ['black', 'Black Market'], ['wright', 'Shipwright'], ['tavern', 'Tavern']];
+    const tabs = [['harbor', 'Harbor'], ['general', 'Store'], ['weapons', 'Weapons'], ['black', 'Black Market'], ['wright', 'Shipwright'], ['outfitter', 'Outfitter'], ['tavern', 'Tavern']];
     this.el.innerHTML = `
       <div class="panel-head">
         <div class="port-title"><h3>${this.port.name}</h3><span>${this.game.resources.coins} gold</span></div>
@@ -68,7 +68,49 @@ export class PortUI {
     if (this.tab === 'harbor') this._renderHarbor(body);
     else if (this.tab === 'wright') this._renderWright(body);
     else if (this.tab === 'tavern') this._renderTavern(body);
+    else if (this.tab === 'outfitter') this._renderOutfitter(body);
     else this._renderShop(body, this.tab);
+  }
+
+  /* ---- outfitter: ship cosmetics ---------------------------------------- */
+
+  _renderOutfitter(body) {
+    const { game } = this;
+    const { SAILS, FLAGS, FIGUREHEADS, LANTERNS } = game.cosmeticsDefs;
+    const section = (kind, defs, label) => {
+      const rows = Object.entries(defs)
+        .filter(([, d]) => d.cost)
+        .map(([id, d]) => {
+          const owned = game.cosmetics.isUnlocked(kind, id);
+          const afford = game.resources.coins >= d.cost;
+          return `<div class="shop-row" style="--rar:#c8cdd2">
+            <div class="shop-info"><span class="shop-name">${d.name}</span>
+            <span class="shop-desc">${label} cosmetic</span></div>
+            <button class="mini-btn cos-buy" data-kind="${kind}" data-id="${id}" data-cost="${d.cost}"
+              ${owned ? 'disabled' : afford ? '' : 'disabled'}>${owned ? 'Owned' : `${d.cost}g`}</button>
+          </div>`;
+        }).join('');
+      return rows ? `<h4>${label}</h4>${rows}` : '';
+    };
+    body.innerHTML = `
+      <p class="panel-note">Fit what you buy from the Locker tab of your Captain's Log (L).
+      Rarer looks come from collections, achievements and legend.</p>
+      ${section('sail', SAILS, 'Sails')}
+      ${section('flag', FLAGS, 'Flags')}
+      ${section('figurehead', FIGUREHEADS, 'Figureheads')}
+      ${section('lantern', LANTERNS, 'Lanterns')}`;
+    body.querySelectorAll('.cos-buy').forEach((b) => {
+      b.addEventListener('click', () => {
+        const cost = Number(b.dataset.cost);
+        if (game.resources.coins < cost) return;
+        game.resources.coins -= cost;
+        game.cosmetics.unlock(b.dataset.kind, b.dataset.id);
+        game.cosmetics.equip(b.dataset.kind, b.dataset.id);
+        game.events.emit('resources:changed', { ...game.resources });
+        game.events.emit('sfx', 'buy');
+        this.render();
+      });
+    });
   }
 
   /* ---- harbor: repair + sell ------------------------------------------ */
@@ -84,6 +126,12 @@ export class PortUI {
         if (s) sellables.push({ addr: { cname, i }, ...s });
       });
     }
+    const deed = !game.homestead.owned
+      ? `<div class="harbor-repair">
+          <span>🏝 Deed to a Private Isle<br><span class="hint-inline">Claim a wild island near this port as your own.</span></span>
+          <button class="btn deed-btn" ${game.resources.coins < 2500 ? 'disabled' : ''}>2500 gold</button>
+        </div>`
+      : '';
     body.innerHTML = `
       <div class="harbor-repair">
         <span>Hull: ${Math.round(st.hull)}/${st.maxHull}</span>
@@ -91,6 +139,7 @@ export class PortUI {
           Repair All (${cost} gold)
         </button>
       </div>
+      ${deed}
       <h4>Sell Loot <span class="hint-inline">(60% of value · click an item)</span></h4>
       <div class="item-grid sell-grid">
         ${sellables.map((s, idx) => {
@@ -102,6 +151,16 @@ export class PortUI {
           </div>`;
         }).join('') || '<p class="empty-note">Nothing to sell.</p>'}
       </div>`;
+    body.querySelector('.deed-btn')?.addEventListener('click', () => {
+      if (game.resources.coins < 2500) return;
+      if (game.homestead.claimNear(this.port)) {
+        game.resources.coins -= 2500;
+        game.events.emit('resources:changed', { ...game.resources });
+        this.render();
+      } else {
+        game.hud.toast('No suitable island near this port — try another.', '#e0b345');
+      }
+    });
     body.querySelector('.repair-btn')?.addEventListener('click', () => {
       game.resources.coins -= cost;
       st.repair(missing);
@@ -129,7 +188,10 @@ export class PortUI {
     const { game } = this;
     const shop = SHOPS[shopKey];
     const rng = this._rng(shopKey.length);
-    const markup = shopKey === 'black' ? 1.4 : 1;
+    // Faction standing and daily fairs move prices.
+    const factionMult = game.factions?.priceMult(shopKey) ?? 1;
+    const dailyMult = game.daily?.modifier?.prices ?? 1;
+    const markup = (shopKey === 'black' ? 1.4 : 1) * factionMult * dailyMult;
     // Deterministic daily stock: 6-8 entries from the pool.
     const stock = [];
     const pool = [...shop.pool];
@@ -280,6 +342,15 @@ export class PortUI {
           </div>`;
         }).join('')}
       </div>
+      ${game.player.level >= 20 ? `
+      <div class="quest-row" style="border-color:rgba(240,168,60,0.5)">
+        <div class="quest-info">
+          <div class="quest-name">Retire into Legend (Prestige ${game.prestige} → ${game.prestige + 1})</div>
+          <div class="quest-desc">Your level resets to 1. You keep everything else — and gain a permanent
+          +2% ship speed and +1 luck, forever. The Flag of Legend flies for those who dare.</div>
+        </div>
+        <button class="mini-btn prestige-btn">Retire</button>
+      </div>` : ''}
       <h4>Contracts <span class="hint-inline">(${game.quests.active.length}/${MAX_ACTIVE} active)</span></h4>
       <div class="quest-list">
         ${offers.map((o, i) => {
@@ -333,6 +404,12 @@ export class PortUI {
         const q = game.quests.active.find((q) => q.id === b.dataset.id);
         if (q && game.quests.tryTurnIn(q)) this.render();
       });
+    });
+    body.querySelector('.prestige-btn')?.addEventListener('click', () => {
+      if (confirm('Retire into Legend? Your level resets to 1; everything else stays — plus permanent bonuses.')) {
+        game.doPrestige();
+        this.render();
+      }
     });
   }
 }

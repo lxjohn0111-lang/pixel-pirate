@@ -7,8 +7,12 @@ import { clamp } from '../util/math.js';
 
 const DAY_SCALE = [0, 2, 4, 7, 9, 12, 14, 16]; // C major pentatonic-ish
 const NIGHT_SCALE = [0, 3, 5, 7, 10, 12, 15];  // minor pentatonic
+const BOSS_SCALE = [0, 1, 5, 7, 8, 12, 13];    // phrygian menace
+const DUNGEON_SCALE = [0, 3, 7, 10, 12];       // sparse and hollow
 const DAY_ROOT = 261.63; // C4
 const NIGHT_ROOT = 196.0; // G3
+const BOSS_ROOT = 146.83; // D3
+const DUNGEON_ROOT = 164.81; // E3
 
 export class AudioManager {
   constructor(game) {
@@ -18,6 +22,7 @@ export class AudioManager {
     this._creakTimer = 4;
     this._beatTimer = 0;
     this._lastNote = 0;
+    this.musicMode = 'normal'; // normal | boss | dungeon
 
     game.events.on('sfx', (name) => this.play(name));
     game.events.on('ship:collide', () => this.play('thud'));
@@ -125,24 +130,51 @@ export class AudioManager {
       if (ship.speedNorm > 0.05) this.play('creak');
     }
 
-    // Generative music box.
+    // Generative music box: the melody follows the moment — bright by
+    // day, wistful by night, driving in boss fights, hollow underground.
     this._beatTimer -= dt;
     if (this._beatTimer <= 0) {
       const night = dayNight.snapshot.sun < 0.35;
-      this._beatTimer = night ? 0.62 : 0.44; // night music is slower
-      const density = night ? 0.3 : 0.42;
+      let scale = night ? NIGHT_SCALE : DAY_SCALE;
+      let root = night ? NIGHT_ROOT : DAY_ROOT;
+      let beat = night ? 0.62 : 0.44;
+      let density = night ? 0.3 : 0.42;
+      let gain = night ? 0.028 : 0.038;
+      let decay = night ? 1.4 : 0.9;
+      if (this.musicMode === 'boss') {
+        scale = BOSS_SCALE;
+        root = BOSS_ROOT;
+        beat = 0.3;
+        density = 0.6;
+        gain = 0.045;
+        decay = 0.5;
+      } else if (this.musicMode === 'dungeon') {
+        scale = DUNGEON_SCALE;
+        root = DUNGEON_ROOT;
+        beat = 0.8;
+        density = 0.25;
+        gain = 0.03;
+        decay = 2;
+      }
+      this._beatTimer = beat;
       if (Math.random() < density) {
-        const scale = night ? NIGHT_SCALE : DAY_SCALE;
-        const root = night ? NIGHT_ROOT : DAY_ROOT;
         // Melodies wander stepwise for musicality.
         this._lastNote = clamp(
           this._lastNote + (((Math.random() * 3) | 0) - 1),
           0, scale.length - 1,
         );
         const freq = root * Math.pow(2, scale[this._lastNote] / 12);
-        this._pluck(freq, night ? 0.028 : 0.038, night ? 1.4 : 0.9);
+        this._pluck(freq, gain, decay);
+        // boss mode gets a driving low pulse underneath
+        if (this.musicMode === 'boss' && Math.random() < 0.5) {
+          this._pluck(root / 2, 0.05, 0.3);
+        }
       }
     }
+  }
+
+  setMusicMode(mode) {
+    this.musicMode = mode;
   }
 
   _pluck(freq, gain, decay) {
@@ -341,6 +373,52 @@ export class AudioManager {
       case 'upgrade': {
         this._thump(140, 0.1, t, 0.2);
         [523, 659, 784].forEach((f, i) => this._blip(f, 0.16, t + 0.1 + i * 0.08, 'triangle', 0.1));
+        break;
+      }
+      /* ---- Part 3: legends, dungeons, fishing ------------------------- */
+      case 'roar': {
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(90, t);
+        osc.frequency.exponentialRampToValueAtTime(38, t + 1);
+        const f = this.ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 340;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.32, t + 0.12);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+        osc.connect(f);
+        f.connect(g);
+        g.connect(this.sfxBus);
+        osc.start(t);
+        osc.stop(t + 1.3);
+        this._noiseBurst(200, 1, t, 0.2, 'lowpass');
+        break;
+      }
+      case 'slam': {
+        this._thump(50, 0.4, t, 0.5);
+        this._noiseBurst(500, 0.3, t, 0.3, 'lowpass');
+        break;
+      }
+      case 'hiss': {
+        this._noiseBurst(4200, 0.5, t, 0.12, 'highpass');
+        break;
+      }
+      case 'bite': {
+        this._blip(320, 0.07, t, 'sine', 0.16);
+        this._noiseBurst(1800, 0.1, t, 0.1);
+        break;
+      }
+      case 'cast': {
+        this._noiseBurst(3000, 0.14, t, 0.06, 'highpass');
+        this._blip(520, 0.05, t + 0.15, 'sine', 0.05);
+        break;
+      }
+      case 'dungeon': {
+        this._thump(70, 0.6, t, 0.25);
+        this._blip(146, 0.5, t + 0.1, 'triangle', 0.06);
+        this._blip(110, 0.7, t + 0.4, 'triangle', 0.05);
         break;
       }
     }

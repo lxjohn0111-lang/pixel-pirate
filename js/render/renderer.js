@@ -59,10 +59,11 @@ export class Renderer {
     const view = this.viewRect();
     this.water.quality = particles.quality;
 
-    // Boarding combat replaces the world view entirely.
-    if (game.boarding?.active) {
+    // Boarding combat / dungeon crawls replace the world view entirely.
+    const scene = game.boarding?.active ? game.boarding : game.dungeon?.active ? game.dungeon : null;
+    if (scene) {
       g.setTransform(1, 0, 0, 1, 0, 0);
-      game.boarding.draw(g, this.buffer.width, this.buffer.height, t);
+      scene.draw(g, this.buffer.width, this.buffer.height, t);
       this._blit();
       return;
     }
@@ -95,6 +96,7 @@ export class Renderer {
       for (const s of chunk.seaweed) this._drawSeaweed(g, s, t);
     });
     wildlife.drawUnderwater(g, t);
+    game.legends?.drawUnder(g, t);
 
     // 4. Wake foam (below the hull)
     particles.drawLayer(g, 'below');
@@ -114,20 +116,26 @@ export class Renderer {
     game.combat?.collectSurfaceDrawables(drawables, t);
     game.encounters?.collectSurfaceDrawables(drawables, t, view.x, view.y, view.w, view.h);
     game.ports?.collectSurfaceDrawables(drawables, t, view.x, view.y, view.w, view.h);
+    // Part 3 layers: legends of the deep, the captain's isle.
+    game.legends?.collectSurfaceDrawables(drawables, t);
+    game.homestead?.collectSurfaceDrawables(drawables, t);
     drawables.sort((a, b) => a.y - b.y);
     collectibles.draw(g, view.x, view.y, view.w, view.h, t);
     for (const d of drawables) d.draw(g);
 
     // 6. Foreground particles, floating text, birds, cannonballs
     game.combat?.drawProjectiles(g, t);
+    game.fishing?.draw(g, t);
     particles.drawLayer(g, 'above');
     particles.drawTexts(g);
     wildlife.drawAir(g, t);
 
-    // 7. Weather
+    // 7. Weather (haunted-fog events thicken the local air)
     this.water.drawCloudShadows(g, view.x, view.y, view.w, view.h, t, weather);
     if (weather.rain > 0.02) this._drawRain(g, view, weather);
-    if (weather.fog > 0.02) this._drawFog(g, view, t, weather);
+    const localFog = game.worldEvents?.fogAt(game.camera.x, game.camera.y) ?? 0;
+    const effFog = Math.max(weather.fog, localFog * 0.9);
+    if (effFog > 0.02) this._drawFog(g, view, t, { fog: effFog });
 
     g.restore();
 
@@ -266,16 +274,19 @@ export class Renderer {
       g.globalCompositeOperation = 'source-over';
     }
 
-    // Lantern glow around the ship at night (additive).
+    // Lantern glow around the ship at night (additive, lantern-colored;
+    // the Storm Lantern relic burns twice as far).
     if (s.sun < 0.35) {
       const sx = ship.x - view.x;
       const sy = ship.y - view.y;
       const flicker = 0.9 + Math.sin(t * 11) * 0.04 + Math.sin(t * 23) * 0.03;
-      const r = 70 * flicker;
+      const stormLantern = this.game.shipState?.relic === 'stormLantern';
+      const r = 70 * flicker * (stormLantern ? 1.9 : 1);
+      const lc = ship.lanternColor ?? [255, 190, 96];
       const grad = g.createRadialGradient(sx, sy, 4, sx, sy, r);
       const str = (0.35 - s.sun) / 0.35;
-      grad.addColorStop(0, `rgba(255,190,96,${0.34 * str})`);
-      grad.addColorStop(0.5, `rgba(255,170,70,${0.12 * str})`);
+      grad.addColorStop(0, `rgba(${lc[0]},${lc[1]},${lc[2]},${0.34 * str})`);
+      grad.addColorStop(0.5, `rgba(${lc[0]},${Math.round(lc[1] * 0.9)},${Math.round(lc[2] * 0.8)},${0.12 * str})`);
       grad.addColorStop(1, 'rgba(255,160,60,0)');
       g.globalCompositeOperation = 'lighter';
       g.fillStyle = grad;

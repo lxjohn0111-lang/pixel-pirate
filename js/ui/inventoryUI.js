@@ -11,7 +11,7 @@ import { drawPirate } from '../render/pirate.js';
 
 const SLOT_LABELS = {
   sword: 'Sword', pistol: 'Pistol', musket: 'Musket', hat: 'Hat', coat: 'Coat',
-  boots: 'Boots', ring: 'Ring', necklace: 'Necklace', charm: 'Charm',
+  boots: 'Boots', ring: 'Ring', necklace: 'Necklace', charm: 'Charm', relic: 'Relic',
 };
 
 export class InventoryUI {

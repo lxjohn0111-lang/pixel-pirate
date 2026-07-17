@@ -16,6 +16,7 @@ const TYPE_STATS = {
   merchant: { hull: 90,  speed: 48,  turn: 0.9, cannons: 1, crew: [2, 3], table: 'merchantShip' },
   pirate:   { hull: 80,  speed: 72,  turn: 1.5, cannons: 2, crew: [2, 4], table: 'pirateShip' },
   navy:     { hull: 130, speed: 64,  turn: 1.2, cannons: 3, crew: [3, 5], table: 'navyShip' },
+  ghost:    { hull: 110, speed: 60,  turn: 1.6, cannons: 3, crew: [0, 0], table: 'lockedChest' },
 };
 
 export class AIShip {
@@ -49,6 +50,40 @@ export class AIShip {
     this._wanderDir = this.heading;
     this._fireTimer = 0;
     this.looted = false;
+    // living-world state
+    this.foe = null;
+    this.fleeFrom = null;
+    this.waypoint = null;
+    this.convoyLeader = null;
+    this.convoyOffset = 0;
+    this._retarget = Math.random() * 1.2;
+  }
+
+  /** Choose a ship-vs-ship target based on faction instincts. */
+  _pickFoe(game) {
+    const hunts = {
+      pirate: (s) => s.type === 'merchant' || s.type === 'civilian' || s.type === 'fishing',
+      navy: (s) => s.type === 'pirate' || s.type === 'ghost',
+    }[this.type];
+    if (!hunts) return null;
+    let best = null;
+    let bestD = 380 * 380;
+    for (const s of game.combat.ships) {
+      if (s === this || s.state !== 'sailing' || !hunts(s)) continue;
+      const dx = s.x - this.x;
+      const dy = s.y - this.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestD) {
+        bestD = d2;
+        best = s;
+      }
+    }
+    // A pirate that spots the player nearby prefers richer prey.
+    if (this.type === 'pirate' && this.hostileToPlayer) {
+      const dp = Math.hypot(game.ship.x - this.x, game.ship.y - this.y);
+      if (dp * dp < bestD) return null; // player handled by main brain
+    }
+    return best;
   }
 
   get boardable() {
@@ -61,7 +96,7 @@ export class AIShip {
   get label() {
     return {
       fishing: 'Fishing Boat', civilian: 'Sloop', merchant: 'Merchant Ship',
-      pirate: 'Pirate Raider', navy: 'Navy Patrol',
+      pirate: 'Pirate Raider', navy: 'Navy Patrol', ghost: 'Ghost Ship',
     }[this.type];
   }
 
@@ -81,20 +116,38 @@ export class AIShip {
     const { ship } = game;
     const distPlayer = Math.hypot(ship.x - this.x, ship.y - this.y);
 
+    // ---- living world: pick a foe (the player is just one ship among many)
+    // Pirates raid merchants; the navy hunts pirates; fights play out with
+    // real cannons whether or not the player is watching.
+    this._retarget -= dt;
+    if (this._retarget <= 0) {
+      this._retarget = 1.2;
+      this.foe = this._pickFoe(game);
+    }
+    if (this.foe && (this.foe.state !== 'sailing' && this.foe !== ship)) this.foe = null;
+
     // ---- pick a behavior -------------------------------------------------
     let targetHeading = this._wanderDir;
     let throttle = 0.55;
     let wantFire = null; // {x, y} to shoot at
 
+    const playerFoe = this.hostileToPlayer && distPlayer < 420;
+    const aiFoe = !playerFoe && this.foe && this.foe !== ship;
+
     if (this.fleeing) {
-      const away = Math.atan2(this.y - ship.y, this.x - ship.x);
+      const threat = this.fleeFrom ?? ship;
+      const away = Math.atan2(this.y - threat.y, this.x - threat.x);
       targetHeading = away;
       throttle = 1;
-      if (distPlayer > 700) this.fleeing = false;
-    } else if (this.hostileToPlayer && distPlayer < 420) {
-      // Hunt the player: close to gun range, then hold a broadside arc.
-      const bearing = Math.atan2(ship.y - this.y, ship.x - this.x);
-      if (distPlayer > 210) {
+      if (Math.hypot(this.x - threat.x, this.y - threat.y) > 700) {
+        this.fleeing = false;
+        this.fleeFrom = null;
+      }
+    } else if (playerFoe || aiFoe) {
+      const foe = playerFoe ? ship : this.foe;
+      const dist = Math.hypot(foe.x - this.x, foe.y - this.y);
+      const bearing = Math.atan2(foe.y - this.y, foe.x - this.x);
+      if (dist > 210) {
         targetHeading = bearing;
         throttle = 1;
       } else {
@@ -102,15 +155,29 @@ export class AIShip {
         // slowing down so the duel stays readable (and hittable).
         const side = angleDiff(this.heading, bearing) > 0 ? 1 : -1;
         targetHeading = bearing - (Math.PI / 2) * side;
-        throttle = distPlayer < 120 ? 0.25 : 0.5;
-        wantFire = { x: ship.x, y: ship.y, dist: distPlayer };
+        throttle = dist < 120 ? 0.25 : 0.5;
+        wantFire = { x: foe.x, y: foe.y, dist };
       }
+    } else if (this.convoyLeader && this.convoyLeader.state === 'sailing') {
+      // Convoy escorts keep formation off the leader's quarter.
+      const lx = this.convoyLeader.x - Math.cos(this.convoyLeader.heading) * 50 + this.convoyOffset;
+      const ly = this.convoyLeader.y - Math.sin(this.convoyLeader.heading) * 50;
+      const d = Math.hypot(lx - this.x, ly - this.y);
+      targetHeading = d > 12 ? Math.atan2(ly - this.y, lx - this.x) : this.convoyLeader.heading;
+      throttle = d > 90 ? 1 : 0.55;
     } else {
-      // Wander with occasional course changes.
+      // Travel with purpose: pick a distant waypoint, sail to it, repeat.
+      // (Reads as ships going somewhere rather than milling about.)
+      if (!this.waypoint || Math.hypot(this.waypoint.x - this.x, this.waypoint.y - this.y) < 90) {
+        const a = Math.random() * TAU;
+        const d = 600 + Math.random() * 900;
+        this.waypoint = { x: this.x + Math.cos(a) * d, y: this.y + Math.sin(a) * d };
+      }
       this._wanderT -= dt;
       if (this._wanderT <= 0) {
-        this._wanderT = 4 + Math.random() * 6;
-        this._wanderDir += (Math.random() - 0.5) * 1.6;
+        this._wanderT = 3 + Math.random() * 4;
+        this._wanderDir = Math.atan2(this.waypoint.y - this.y, this.waypoint.x - this.x)
+          + (Math.random() - 0.5) * 0.5;
       }
       targetHeading = this._wanderDir;
       throttle = this.type === 'fishing' ? 0.3 : 0.55;
@@ -162,20 +229,27 @@ export class AIShip {
   }
 
   /** Returns true if this hit sank the ship. */
-  takeDamage(amount, game, fromPlayer) {
+  takeDamage(amount, game, fromPlayer, attacker = null) {
     if (this.state !== 'sailing') return false;
     this.hull -= amount;
     if (Math.random() < 0.35) this.sailHp = Math.max(0.3, this.sailHp - 0.15);
+    const peaceful = this.type === 'merchant' || this.type === 'civilian' || this.type === 'fishing';
     if (fromPlayer) {
       // Peaceful ships panic; fighters remember.
-      if (this.type === 'merchant' || this.type === 'civilian' || this.type === 'fishing') {
+      if (peaceful) {
         this.fleeing = true;
+        this.fleeFrom = game.ship;
         if (this.type === 'merchant' && Math.random() < 0.4) {
           game.combat.jettisonCargo(this); // drops a crate to distract you
         }
       } else {
         this.hostileToPlayer = true;
       }
+    } else if (attacker && peaceful) {
+      // Merchants run from raiders too — and shed cargo in the panic.
+      this.fleeing = true;
+      this.fleeFrom = attacker;
+      if (this.type === 'merchant' && Math.random() < 0.25) game.combat.jettisonCargo(this);
     }
     if (this.hull <= 0) {
       this.state = 'sinking';
@@ -205,11 +279,19 @@ export class AIShip {
     g.restore();
 
     g.rotate(this.heading + Math.sin(this.bob * 1.7) * 0.03 + sink * 0.5);
-    if (sink > 0) g.globalAlpha = 1 - sink * 0.85;
+    const ghostly = this.type === 'ghost';
+    g.globalAlpha = (ghostly ? 0.68 + Math.sin(this.bob * 2.4) * 0.1 : 1) * (1 - sink * 0.85);
     const scale = 1 - sink * 0.25; // slipping under
     g.scale(scale, scale);
+    if (ghostly) {
+      // spectral aura
+      g.fillStyle = 'rgba(120,240,190,0.14)';
+      g.beginPath();
+      g.ellipse(0, 0, hull.width * 0.62, hull.height * 0.55, 0, 0, TAU);
+      g.fill();
+    }
     g.drawImage(hull, -hull.width / 2, -hull.height / 2);
-    if (this.speed > 8 && sink === 0) g.drawImage(sail, -sail.width / 2, -sail.height / 2);
+    if ((this.speed > 8 || ghostly) && sink === 0) g.drawImage(sail, -sail.width / 2, -sail.height / 2);
     g.restore();
     g.globalAlpha = 1;
 

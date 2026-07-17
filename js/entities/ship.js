@@ -4,7 +4,7 @@
 
 import { SHIP } from '../core/constants.js';
 import { clamp, damp, lerp, angleDiff, TAU } from '../util/math.js';
-import { shipHull, shipSail, shipSailFurled, shipFlag, SHIP_W, SHIP_H } from '../render/sprites.js';
+import { shipHull, shipSail, shipSailFurled, shipFlag, styledFlag, figureheadSprite, SHIP_W, SHIP_H } from '../render/sprites.js';
 import { buildMiniCaptain } from '../render/pirate.js';
 
 export class Ship {
@@ -25,6 +25,31 @@ export class Ship {
 
   get speedNorm() {
     return clamp(Math.abs(this.speed) / SHIP.maxSpeed, 0, 1);
+  }
+
+  /** Sail sprite, tinted & marked by the equipped sail cosmetic. */
+  _styledSail(base, key) {
+    if (!this.sailStyle || (!this.sailStyle.tint && !this.sailStyle.mark)) return base;
+    const cacheKey = `${key}:${this.sailStyle.id}`;
+    if (this._sailCache?.key !== cacheKey) {
+      const c = document.createElement('canvas');
+      c.width = base.width;
+      c.height = base.height;
+      const g = c.getContext('2d');
+      g.drawImage(base, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      if (this.sailStyle.tint) {
+        g.fillStyle = this.sailStyle.tint;
+        g.fillRect(0, 0, c.width, c.height);
+      }
+      if (this.sailStyle.mark) {
+        g.fillStyle = this.sailStyle.mark;
+        g.fillRect(28, 12, 4, 4); // emblem on the canvas
+        g.fillRect(29, 11, 2, 6);
+      }
+      this._sailCache = { key: cacheKey, canvas: c };
+    }
+    return this._sailCache.canvas;
   }
 
   /** Hull sprite, tinted by the active paint job (Part 2 cosmetics). */
@@ -139,10 +164,12 @@ export class Ship {
   draw(g, t, dayNight) {
     const hull = this._paintedHull();
     // Sail furls at anchor and fills progressively with speed.
-    const sail = this.speedNorm < 0.08
-      ? shipSailFurled()
-      : shipSail(Math.min(2, Math.floor(this.speedNorm * 3)));
-    const flag = shipFlag(((t * 6) | 0) % 3);
+    const sailKey = this.speedNorm < 0.08 ? 'furled' : `s${Math.min(2, Math.floor(this.speedNorm * 3))}`;
+    const sailBase = sailKey === 'furled' ? shipSailFurled() : shipSail(Math.min(2, Math.floor(this.speedNorm * 3)));
+    const sail = this._styledSail(sailBase, sailKey);
+    const flag = this.flagStyle
+      ? styledFlag(((t * 6) | 0) % 3, this.flagStyle.id, this.flagStyle.body, this.flagStyle.mark)
+      : shipFlag(((t * 6) | 0) % 3);
 
     g.save();
     g.translate(Math.round(this.x), Math.round(this.y + this.bob));
@@ -158,13 +185,18 @@ export class Ship {
 
     g.rotate(this.heading + this.roll);
     g.drawImage(hull, -SHIP_W / 2, -SHIP_H / 2);
+    // figurehead rides the bow
+    if (this.figurehead && this.figurehead !== 'none') {
+      g.drawImage(figureheadSprite(this.figurehead), SHIP_W / 2 - 6, -4);
+    }
     g.drawImage(sail, -SHIP_W / 2, -SHIP_H / 2);
     g.drawImage(flag, -12, -3); // pennant streaming behind the mast
 
-    // Stern lantern glow at night.
+    // Stern lantern glow at night (color follows the fitted lantern).
     if (dayNight.snapshot.sun < 0.35) {
       const glow = (0.35 - dayNight.snapshot.sun) / 0.35;
-      g.fillStyle = `rgba(255,196,90,${0.75 * glow})`;
+      const lc = this.lanternColor ?? [255, 196, 90];
+      g.fillStyle = `rgba(${lc[0]},${lc[1]},${lc[2]},${0.75 * glow})`;
       g.fillRect(-22, -1, 2, 2);
     }
     g.restore();
@@ -174,6 +206,25 @@ export class Ship {
     const hx = this.x + Math.cos(this.heading) * -13;
     const hy = this.y + Math.sin(this.heading) * -13 + this.bob;
     g.drawImage(this.captain, Math.round(hx - 4), Math.round(hy - 9));
+
+    // The ship's pet keeps the captain company.
+    if (this.petId) {
+      const px = Math.round(hx + 7);
+      const py = Math.round(hy - 3 + Math.sin(t * 2.4) * 0.8);
+      if (this.petId === 'parrot') {
+        g.fillStyle = '#c9506a';
+        g.fillRect(px, py - 4, 2, 3);
+        g.fillStyle = '#2e6e4e';
+        g.fillRect(px, py - 1, 2, 1);
+        g.fillStyle = '#e0b345';
+        g.fillRect(px + 2, py - 4, 1, 1);
+      } else {
+        g.fillStyle = '#7a5a34';
+        g.fillRect(px, py - 3, 3, 3);
+        g.fillStyle = '#c9a06a';
+        g.fillRect(px + 1, py - 2, 1, 1);
+      }
+    }
   }
 
   serialize() {

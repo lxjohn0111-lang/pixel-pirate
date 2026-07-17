@@ -32,7 +32,7 @@ export class Player {
     this.speed = 60 + eq.speed * 6; // boarding move speed (px/s)
     this.reloadSpeed = eq.reloadSpeed; // % faster firearm reloads
     this.critChance = 5 + eq.critChance; // %
-    this.luck = eq.luck;
+    this.luck = eq.luck + (this.bonusLuck ?? 0); // equipment + prestige + daily tides
     this.health = Math.min(this.health, this.maxHealth);
   }
 

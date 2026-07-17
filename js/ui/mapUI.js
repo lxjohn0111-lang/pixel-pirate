@@ -219,16 +219,38 @@ export class MapUI {
       g.stroke();
     }
 
-    // custom markers
+    // custom markers (the home isle gets a golden flag)
     for (const m of game.mapData.markers) {
       const p = this._toMap(m.x, m.y);
-      g.fillStyle = '#c9506a';
+      g.fillStyle = m.home ? '#f0a83c' : '#c9506a';
       g.fillRect(p.x - 1, p.y - 8, 2, 8);
       g.beginPath();
       g.moveTo(p.x + 1, p.y - 8);
       g.lineTo(p.x + 8, p.y - 5.5);
       g.lineTo(p.x + 1, p.y - 3);
       g.fill();
+    }
+
+    // expedition search areas (dashed circles that shrink as clues resolve)
+    for (const area of game.treasureHunts?.mapAreas() ?? []) {
+      const p = this._toMap(area.x, area.y);
+      g.strokeStyle = area.final ? 'rgba(240,168,60,0.9)' : 'rgba(240,168,60,0.5)';
+      g.setLineDash([4, 3]);
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(p.x, p.y, Math.max(8, area.radius * this.scale), 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
+
+    // active world events pulse on the chart
+    for (const ev of game.worldEvents?.active ?? []) {
+      const p = this._toMap(ev.x, ev.y);
+      g.strokeStyle = 'rgba(156,195,234,0.8)';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.arc(p.x, p.y, 6 + Math.sin(performance.now() / 250) * 2, 0, Math.PI * 2);
+      g.stroke();
     }
 
     // the player's ship

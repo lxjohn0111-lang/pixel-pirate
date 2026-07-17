@@ -34,12 +34,13 @@ export class ShipCombat {
   /** Difficulty tier grows away from the spawn — the far seas are dangerous. */
   targetCounts() {
     const t = this.game.tierAt(this.game.ship.x, this.game.ship.y);
+    const mod = this.game.daily?.modifier ?? {};
     return {
       fishing: 1,
       civilian: 1,
       merchant: 1,
-      pirate: 1 + (t >= 2 ? 1 : 0),
-      navy: t >= 1 ? 1 : 0,
+      pirate: 1 + (t >= 2 ? 1 : 0) + (mod.pirates ? 1 : 0),
+      navy: (t >= 1 ? 1 : 0) + (mod.navy ? 1 : 0),
     };
   }
 
@@ -101,10 +102,12 @@ export class ShipCombat {
           for (const s of this.ships) {
             if (s.id === b.from || s.state !== 'sailing') continue;
             if (dist2(b.x, b.y, s.x, s.y) < 24 * 24) {
-              const sank = s.takeDamage(b.damage, game, b.from === 'player');
+              const attacker = b.from === 'player' ? game.ship : this.ships.find((o) => o.id === b.from);
+              const sank = s.takeDamage(b.damage, game, b.from === 'player', attacker);
               game.particles.burstSplinters(b.x, b.y, 8);
               game.events.emit('sfx', 'woodhit');
               if (b.from === 'player') {
+                game.events.emit('cannon:hit');
                 game.particles.spawnText(b.x, b.y - 10, `${b.damage}`, '#f0a83c');
                 if (sank) game.events.emit('sfx', 'sink');
               }
@@ -112,6 +115,11 @@ export class ShipCombat {
               break;
             }
           }
+        }
+        // Legendary creatures are targets too (Part 3).
+        if (!done && b.from === 'player' && game.legends?.hitTest(b)) {
+          game.events.emit('cannon:hit');
+          done = true;
         }
       }
 
@@ -168,6 +176,11 @@ export class ShipCombat {
         target = s;
       }
     }
+    // Legends (kraken tentacles, serpents) take priority when closer.
+    const legendAim = game.legends?.nearestTarget?.(ship.x, ship.y);
+    if (legendAim && dist2(legendAim.x, legendAim.y, ship.x, ship.y) < bestD) {
+      target = { x: legendAim.x, y: legendAim.y, heading: 0, speed: 0 };
+    }
     if (target) {
       side = angleDiff(ship.heading, Math.atan2(target.y - ship.y, target.x - ship.x)) > 0 ? 1 : -1;
     }
@@ -203,7 +216,7 @@ export class ShipCombat {
     }
     game.camera.addShake(1.6);
     game.events.emit('sfx', 'cannon');
-    game.events.emit('playership:fired');
+    game.events.emit('playership:fired', { count: n });
   }
 
   /** AI broadside toward a point. */
@@ -277,13 +290,27 @@ export class ShipCombat {
   }
 
   _spawn(type) {
-    const { ship, world } = this.game;
+    const { ship, world, factions } = this.game;
     const a = Math.random() * TAU;
     const d = SPAWN_RADIUS + Math.random() * 220;
     const x = ship.x + Math.cos(a) * d;
     const y = ship.y + Math.sin(a) * d;
-    if (!world.isOpenWater(x, y)) return;
-    this.ships.push(new AIShip(type, x, y, this.game.tierAt(x, y)));
+    if (!world.isOpenWater(x, y)) return null;
+    const s = new AIShip(type, x, y, this.game.tierAt(x, y));
+    // Faction standing shapes first impressions.
+    if (type === 'navy' && factions?.isHostile('navy')) s.hostileToPlayer = true;
+    if (type === 'merchant' && factions?.isHostile('merchants')) s.fleeing = true;
+    if (type === 'pirate' && factions?.isFriendly('pirates')) s.hostileToPlayer = false;
+    this.ships.push(s);
+    // Merchants sometimes sail as convoys with a sloop in trail.
+    if (type === 'merchant' && Math.random() < 0.35 && this.ships.length < 9) {
+      const escort = new AIShip('civilian', x - 60, y + 20, this.game.tierAt(x, y));
+      escort.convoyLeader = s;
+      escort.convoyOffset = (Math.random() - 0.5) * 60;
+      this.ships.push(escort);
+      this.game.collection?.discover('ships', 'convoy');
+    }
+    return s;
   }
 
   /* ---- drawing (hooked into the renderer's layers) -------------------- */

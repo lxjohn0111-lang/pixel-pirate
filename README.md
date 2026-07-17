@@ -5,9 +5,12 @@ no frameworks, no build step, no external assets. Every sprite, island and
 sound is generated procedurally at runtime.
 
 **Part 1** built the foundation: one customizable pirate, one small wooden
-ship, and an endless mysterious ocean. **Part 2** populates that ocean:
+ship, and an endless mysterious ocean. **Part 2** populated that ocean:
 encounters, loot and rarity, a full inventory, combat at sea and on deck,
-crew, ports, contracts and a world map.
+crew, ports, contracts and a world map. **Part 3 — the final expansion —**
+turns it into a living sandbox: factions, world events, legendary bosses,
+dungeons, fishing, expeditions, a private island, a collection book,
+achievements, daily content and endless prestige.
 
 ## Running
 
@@ -33,6 +36,8 @@ Then open <http://localhost:8000>.
 | Quick bar | `1`–`4` | tap slot |
 | Boarding: move / attack | `WASD` + click (or `J`) | joystick + 🗡 |
 | Boarding: pistol / musket / dodge | `K` / `L` / `Shift` | 🔫 / 💨 |
+| Fish (cast / hook) | `R`, then `R`/`F` on the bite | 🎣 button |
+| Captain's Log (collection, achievements...) | `L` | 📖 button |
 | Pause | `Esc` or `P` | pause button |
 
 ## What's in the foundation
@@ -105,6 +110,61 @@ Then open <http://localhost:8000>.
   objectives, charted treasure and custom markers (click to place).
 - **Save v2** — everything above persists; Part 1 saves migrate seamlessly.
 
+## What the final expansion adds
+
+- **A living world** — ships sail with destinations, merchants form convoys,
+  pirates raid shipping, the navy hunts raiders, and battles play out (and
+  leave burning wrecks and floating cargo) whether or not you're there.
+- **Factions & reputation** — six factions (Brethren of the Coast, Royal
+  Navy, Merchant Guild, Night Runners, Horizon Society, the Sunken Kingdom)
+  react to everything you sink, save and serve: prices shift, patrols turn
+  hostile, raiders let kindred spirits pass.
+- **World events** — rumor toasts point to merchant convoys, pirate
+  ambushes, sea battles, treasure fleets, burning ships, naval blockades,
+  haunted fog (with something inside), great storms and treasure rumors.
+- **Legends** — the three-phase Kraken (destructible tentacles, ink clouds,
+  a vulnerable head), the diving Sea Serpent, the Wailing Duchess (a ghost
+  boss-ship that summons spectral escorts), plus two peaceful wonders: the
+  Wandering Isle (an island that swims) and the Singing Reef. Boss health
+  bars, boss music, exclusive relic drops. All heavily throttled — a
+  sighting is a story.
+- **Dungeons** — shoreline entrances lead into ancient temples, sea caves,
+  volcano depths, sunken ruins and pirate hideouts: chained rooms, spike
+  and lava traps, skeletons and cultists, an Ancient Guardian with a
+  telegraphed slam, a treasure vault and hidden lore tablets. Cleared
+  dungeons stay sealed forever.
+- **Legendary relics** — 12 uniques with real effects: Ghost Cannon (+1 gun
+  per side), Phoenix Sail (speed + self-repair), Storm Lantern (bright
+  night, fast in storms), Golden Compass (points at the unfound), Treasure
+  Locator, Cursed Sword, Kraken Harpoon, Royal Armor and more.
+- **Ship customization** — hull paints, tinted and marked sails, flag
+  designs, bow figureheads, colored lanterns, and your pet parrot or monkey
+  on deck. Bought at port Outfitters or earned from collections,
+  achievements and prestige; managed in the Locker.
+- **A private island** — buy the deed in any port, then build a house
+  (full rest), dock (free repairs), warehouse (+16 storage), treasure room
+  (displays your six rarest finds), garden and pens (daily provisions),
+  beacon bonfire and a statue of yourself.
+- **Collection book** — ten categories (fish, treasures, relics, ships,
+  foes, wildlife, flora, crew traits, legends, locations); every first
+  sighting is recorded and each completed page unlocks a cosmetic.
+- **Fishing** — cast, wait for the tug, hook it in the window; catches vary
+  by biome, hour, weather and season, up to the Midnight Marlin and the
+  mythic Golden Kingfish.
+- **Expeditions** — Weathered Charts open multi-clue treasure hunts: riddles
+  mark shrinking search areas on the chart until the hoard itself surfaces.
+- **Achievements & statistics** — 26 achievements (several award cosmetics)
+  over 20+ tracked lifetime statistics including cannon accuracy.
+- **Daily content** — a shared daily quest, weekly challenge, rotating world
+  modifier (Tailwinds, Pirate Moon, Ghost Tide...) and a free daily treasure
+  chart, all seeded by the real-world date.
+- **Endgame** — at level 20, retire into Legend: level resets, everything
+  else stays, and each prestige rank grants permanent speed and luck plus
+  the Flag of Legend. Repeat forever.
+- **Polish** — boss and dungeon music modes, roars and slams, lantern-colored
+  night glow, localized event fog, and auto-aim assist that includes
+  legendary targets. Still 60 FPS.
+
 ## Architecture
 
 ```
@@ -120,8 +180,13 @@ js/
 ├── world/               simulation
 │   ├── world.js         chunk manager + feature-generator registry
 │   ├── island.js        deterministic island shapes, biomes, decor
-│   ├── encounters.js    wrecks, rafts, survivors, camps, treasure
+│   ├── encounters.js    wrecks, rafts, survivors, camps, dungeons doors
 │   ├── ports.js         procedural harbors on large islands
+│   ├── factions.js      reputation with six factions
+│   ├── events.js        rumor-driven world events
+│   ├── legends.js       Kraken, Serpent, Duchess, wonders
+│   ├── dungeons.js      room-chain dungeon crawls (on the boarding engine)
+│   ├── homestead.js     the captain's private isle
 │   ├── daynight.js      keyframed day/night color cycle
 │   └── weather.js       blended weather state machine
 ├── entities/
@@ -139,6 +204,15 @@ js/
 │   └── boarding.js      deck-to-deck real-time combat
 ├── crew/crew.js         crew members, traits, bonuses
 ├── quests/quests.js     procedural contracts
+├── meta/                long-term progression (Part 3)
+│   ├── stats.js         lifetime statistics (EventBus observers)
+│   ├── collection.js    the collection book + completion rewards
+│   ├── achievements.js  26 achievements over stats & collection
+│   ├── daily.js         date-seeded daily/weekly content & modifiers
+│   └── cosmetics.js     sails, flags, figureheads, lanterns
+├── systems/
+│   ├── fishing.js       biome/time/weather/season fishing
+│   └── treasurehunt.js  multi-clue expedition hunts
 ├── render/
 │   ├── renderer.js      frame composition, backbuffer, lighting
 │   ├── water.js         the animated ocean field
@@ -153,10 +227,10 @@ js/
 
 ### Extension points
 
-Part 2 (inventory, combat, ships, crew, ports, quests, map) plugged in
-through exactly the seams Part 1 left — and the final expansion (bosses,
-sea monsters, ghost ships, world events, fishing, building, skills,
-achievements, statistics) is expected to do the same:
+Every expansion plugged in through the same seams Part 1 established —
+Part 2's inventory/combat/ports/quests and Part 3's factions, events,
+legends, dungeons, fishing, homestead, collection, achievements and
+dailies all arrived without rewriting what came before:
 
 1. **`game.registerSystem(system)`** — anything with an `update(dt)` joins
    the simulation loop (wildlife and collectibles already work this way).

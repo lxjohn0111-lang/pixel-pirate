@@ -4,7 +4,7 @@
 
 import { ITEMS } from './itemdefs.js';
 
-export const EQUIP_SLOTS = ['sword', 'pistol', 'musket', 'hat', 'coat', 'boots', 'ring', 'necklace', 'charm'];
+export const EQUIP_SLOTS = ['sword', 'pistol', 'musket', 'hat', 'coat', 'boots', 'ring', 'necklace', 'charm', 'relic'];
 export const QUICKBAR_SIZE = 4;
 export const PLAYER_SLOTS = 24;
 export const CARGO_BASE_SLOTS = 12;

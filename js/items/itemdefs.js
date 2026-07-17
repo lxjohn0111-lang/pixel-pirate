@@ -92,9 +92,36 @@ export const ITEMS = {
 
   /* -- specials ------------------------------------------------------------------ */
   treasureMap:  { name: 'Treasure Map',    type: 'special', rarity: 'rare',      stack: 5, value: 40, use: 'map', desc: 'X marks the spot. Use to chart it.' },
+  weatheredChart: { name: 'Weathered Chart', type: 'special', rarity: 'epic',    stack: 3, value: 120, use: 'expedition', desc: 'A trail of riddles to a grand hoard. Use to begin the expedition.' },
   message:      { name: 'Message Bottle',  type: 'special', rarity: 'uncommon',  stack: 5, value: 5,  use: 'message', desc: 'A sealed note. Use to read it.' },
   rustyKey:     { name: 'Rusty Key',       type: 'special', rarity: 'uncommon',  stack: 10, value: 15, desc: 'Opens locked chests found at sea.' },
   treasureFragment: { name: 'Treasure Fragment', type: 'special', rarity: 'epic', stack: 8, value: 120, desc: 'Part of something legendary. Collect them.' },
+
+  /* -- legendary relics (Part 3) — each with a unique gameplay effect --- */
+  cursedSword:  { name: 'Cursed Sword',   type: 'weapon', slot: 'sword', rarity: 'legendary', value: 1200, stats: { attack: 32, maxHealth: -20 }, desc: 'It whispers. It cuts. It takes.' },
+  kingsHat:     { name: 'Hat of the Pirate King', type: 'armor', slot: 'hat', rarity: 'legendary', value: 1100, stats: { defense: 6, critChance: 10, maxHealth: 15, luck: 3 }, desc: 'Whoever wears it, rules the tale.' },
+  royalArmor:   { name: 'Royal Armor',    type: 'armor', slot: 'coat', rarity: 'legendary', value: 1300, stats: { defense: 16, maxHealth: 35 }, desc: 'Gilded plate from the palace guard.' },
+  krakenHarpoon: { name: 'Kraken Harpoon', type: 'weapon', slot: 'musket', rarity: 'mythic', value: 2400, stats: { attack: 45, critChance: 10 }, desc: 'Forged to pin gods to the seabed.' },
+  goldenCompass: { name: 'Golden Compass', type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1500, stats: { luck: 4 }, effect: 'compass', desc: 'Points toward whatever you have not found yet.' },
+  ghostCannon:  { name: 'Ghost Cannon',   type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1600, stats: {}, effect: 'ghostCannon', desc: 'A spectral gun crew mans an extra cannon per side.' },
+  phoenixSail:  { name: 'Phoenix Sail',   type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1600, stats: {}, effect: 'phoenixSail', desc: 'The ship sails 12% faster and her wounds close like embers rekindling.' },
+  stormLantern: { name: 'Storm Lantern',  type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1400, stats: {}, effect: 'stormLantern', desc: 'Burns brighter in the dark; foul weather fills your sails (+15% speed in rain).' },
+  treasureLocator: { name: 'Treasure Locator', type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1500, stats: { luck: 2 }, effect: 'locator', desc: 'A needle that trembles near unopened riches.' },
+  serpentScale: { name: 'Serpent Scale',  type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1300, stats: { defense: 6, speed: 2 }, desc: 'Still warm. Still watching.' },
+  coralHeart:   { name: 'Living Coral Heart', type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1400, stats: { maxHealth: 20 }, effect: 'regen', desc: 'It beats in time with the tide, and so do you.' },
+
+  /* -- fishing ------------------------------------------------------------- */
+  fishingRod:  { name: 'Fishing Rod', type: 'special', rarity: 'common', value: 10, desc: 'Stop the ship and press R to cast.' },
+  sardine:     { name: 'Sardine', type: 'fish', rarity: 'common', stack: 20, value: 3, heal: 8, desc: 'Small, silver, everywhere.' },
+  mackerel:    { name: 'Mackerel', type: 'fish', rarity: 'common', stack: 20, value: 5, heal: 12, desc: 'Striped and dependable.' },
+  grouper:     { name: 'Grouper', type: 'fish', rarity: 'uncommon', stack: 20, value: 9, heal: 18, desc: 'A grumpy reef bruiser.' },
+  parrotfish:  { name: 'Parrotfish', type: 'fish', rarity: 'uncommon', stack: 20, value: 12, heal: 15, desc: 'Eats coral, gleams like one.' },
+  tuna:        { name: 'Yellowfin Tuna', type: 'fish', rarity: 'rare', stack: 10, value: 25, heal: 30, desc: 'A torpedo with fins.' },
+  swordfish:   { name: 'Swordfish', type: 'fish', rarity: 'rare', stack: 10, value: 32, heal: 35, desc: 'Duel it and lose.' },
+  moonfish:    { name: 'Moonfish', type: 'fish', rarity: 'epic', stack: 5, value: 70, heal: 50, desc: 'Only rises when the moon does.' },
+  stormkoi:    { name: 'Storm Koi', type: 'fish', rarity: 'epic', stack: 5, value: 85, heal: 55, desc: 'Swims up the rain, they say.' },
+  midnightMarlin: { name: 'Midnight Marlin', type: 'fish', rarity: 'legendary', stack: 3, value: 240, heal: 100, desc: 'A shadow with a spear. Anglers dream of it.' },
+  goldenKingfish: { name: 'Golden Kingfish', type: 'fish', rarity: 'mythic', stack: 1, value: 600, heal: 150, desc: 'The sea only ever mints a few of these.' },
 
   /* -- valuables (sell loot) -------------------------------------------------------- */
   goldNugget:   { name: 'Gold Nugget',     type: 'valuable', rarity: 'rare',      stack: 20, value: 60,  desc: 'Heavy, shiny, spendable.' },
@@ -152,6 +179,7 @@ export const LOOT_TABLES = {
       ['treasureFragment', 7, 1, 2], ['treasureMap', 6, 1, 1],
       ['officerSaber', 5, 1, 1], ['duelPistol', 5, 1, 1], ['navalCoat', 5, 1, 1],
       ['buccaneerBoots', 4, 1, 1], ['signetRing', 4, 1, 1], ['pearlNecklace', 4, 1, 1],
+      ['weatheredChart', 3, 1, 1],
       ['corsairBlade', 2.5, 1, 1], ['dragonPistol', 2, 1, 1], ['longRifle', 2, 1, 1],
       ['captainsHat', 2, 1, 1], ['monkey', 1.5, 1, 1], ['ancientIdol', 1.5, 1, 1],
       ['silkSails', 1.2, 1, 1], ['krakenFang', 0.7, 1, 1], ['stormCoat', 0.6, 1, 1],
@@ -304,6 +332,57 @@ function drawIcon(g, id) {
     g.fillRect(x, y, w, h);
   };
   const def = ITEMS[id];
+
+  // fish: shared silhouette, scale color from rarity
+  if (def?.type === 'fish') {
+    const body = { common: '#8aa0b0', uncommon: '#6fb08a', rare: '#5a8ac0', epic: '#a07ac9', legendary: '#d9a441', mythic: '#e0708a' }[def.rarity];
+    p(2, 5, 7, 3, body);
+    p(3, 4, 5, 1, shade(body, 24));
+    p(3, 8, 4, 1, shade(body, -24));
+    p(9, 4, 2, 5, body); // tail
+    p(3, 5, 1, 1, '#1e1a22'); // eye
+    if (def.rarity === 'legendary' || def.rarity === 'mythic') {
+      p(1, 3, 1, 1, '#fff2c8');
+      p(10, 8, 1, 1, '#fff2c8');
+    }
+    return;
+  }
+  if (id === 'fishingRod') {
+    p(1, 9, 2, 2, '#5a3a20');
+    for (let i = 0; i < 7; i++) p(2 + i, 8 - i, 1, 1, '#8a5f38');
+    p(9, 1, 1, 5, 'rgba(220,230,240,0.7)');
+    p(9, 6, 1, 1, '#e0b345');
+    return;
+  }
+  if (id === 'goldenCompass') {
+    g.strokeStyle = '#e0b345';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(6, 6, 4.5, 0, Math.PI * 2);
+    g.stroke();
+    p(5, 3, 2, 4, '#c9506a');
+    p(5, 6, 2, 3, '#e8e4da');
+    return;
+  }
+  if (id === 'stormLantern') {
+    p(4, 2, 4, 1, '#4a4a52');
+    p(3, 3, 6, 6, '#4a4a52');
+    p(4, 4, 4, 4, '#8cc8ff');
+    p(5, 5, 2, 2, '#e8f4ff');
+    p(4, 9, 4, 1, '#4a4a52');
+    return;
+  }
+  if (id === 'ghostCannon') {
+    p(2, 5, 7, 3, 'rgba(120,240,180,0.7)');
+    p(8, 4, 3, 5, 'rgba(90,200,150,0.8)');
+    p(3, 6, 4, 1, 'rgba(220,255,235,0.9)');
+    return;
+  }
+  if (id === 'phoenixSail') {
+    for (let y = 0; y < 8; y++) p(3, 2 + y, 6 - Math.floor(y / 3), 1, y < 3 ? '#f2d98a' : y < 6 ? '#f0a83c' : '#e05a3c');
+    p(2, 2, 1, 8, '#5a3a20');
+    return;
+  }
   switch (def?.type) {
     case 'weapon':
       if (def.slot === 'sword') {

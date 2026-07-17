@@ -7,7 +7,7 @@
 // Also owns dynamic treasure sites charted by treasure maps.
 
 import { CHUNK_SIZE } from '../core/constants.js';
-import { mulberry32, hash2u, range, rangeInt } from '../util/random.js';
+import { mulberry32, hash2u, rand2, range, rangeInt } from '../util/random.js';
 import { rollLoot } from '../items/itemdefs.js';
 import { createCrewMember } from '../crew/crew.js';
 import { wreckSprite, raftSprite, tentSprite, bottleSprite, lockedChestSprite, chestSprite } from '../render/sprites.js';
@@ -78,6 +78,33 @@ export class Encounters {
         chunk.encounters.push({
           kind: 'lockedChest', id: `${baseId}:locked`, x: p.x, y: p.y,
           searched: world.collected.has(`${baseId}:locked`),
+        });
+      }
+    }
+
+    // Dungeon entrances (Part 3): a dark mouth at the shoreline of
+    // larger wild islands. Cleared dungeons stay sealed forever.
+    if (chunk.island && chunk.island.r > 55 && chunk.island.shore.length > 6) {
+      const droll = rand2(world.seed ^ 0xd0d6, chunk.cx, chunk.cy);
+      if (droll < 0.12) {
+        const isl = chunk.island;
+        const themes = {
+          rock: ['cave', 'volcano', 'hideout'],
+          jungle: ['temple', 'ruins', 'hideout'],
+          palm: ['cave', 'hideout'],
+          sand: ['cave'],
+          coral: ['ruins'],
+        }[isl.biome] ?? ['cave'];
+        const drng = mulberry32(hash2u(world.seed ^ 0xd0d7, chunk.cx, chunk.cy));
+        const sp = isl.shore[rangeInt(drng, 0, isl.shore.length - 1)];
+        chunk.encounters.push({
+          kind: 'dungeon',
+          id: `${baseId}:dungeon`,
+          theme: themes[rangeInt(drng, 0, themes.length - 1)],
+          x: Math.round(sp.x + sp.nx * 6),
+          y: Math.round(sp.y + sp.ny * 6),
+          seed: hash2u(world.seed ^ 0xd0d8, chunk.cx, chunk.cy),
+          searched: world.collected.has(`${baseId}:dungeon`),
         });
       }
     }
@@ -162,6 +189,10 @@ export class Encounters {
         return this.game.inventory.totalCount('rustyKey') > 0 ? 'Unlock the chest (uses Rusty Key)' : 'Locked chest (needs a Rusty Key)';
       case 'camp': return 'Search the camp';
       case 'treasure': return 'Haul up the treasure!';
+      case 'dungeon': {
+        const names = { temple: 'ancient temple', cave: 'sea cave', volcano: 'smoking cavern', ruins: 'sunken ruins', hideout: 'pirate hideout' };
+        return `Enter the ${names[e.theme] ?? 'cave'}`;
+      }
       default: return 'Investigate';
     }
   }
@@ -218,6 +249,10 @@ export class Encounters {
         game.inventory.removeAnywhere('rustyKey', 1);
         consume();
         game.openLoot('Locked Sea Chest', rollLoot(rng, 'lockedChest', luck), e.x, e.y);
+        break;
+      }
+      case 'dungeon': {
+        game.dungeon.enter(e); // clearing it marks it searched
         break;
       }
       case 'treasure': {
@@ -383,6 +418,27 @@ export class Encounters {
         g.arc(Math.round(e.x), Math.round(e.y + bob), 11, 0, TAU);
         g.fill();
         g.drawImage(spr, Math.round(e.x - spr.width / 2), Math.round(e.y - spr.height / 2 + bob));
+        break;
+      }
+      case 'dungeon': {
+        // dark mouth in the rock, twin torches when unexplored
+        g.fillStyle = '#4a4e54';
+        g.fillRect(Math.round(e.x - 9), Math.round(e.y - 11), 18, 12);
+        g.fillStyle = '#5d6165';
+        g.fillRect(Math.round(e.x - 9), Math.round(e.y - 11), 18, 3);
+        g.fillStyle = e.searched ? '#2a2c33' : '#0c0a12';
+        g.fillRect(Math.round(e.x - 5), Math.round(e.y - 8), 10, 9);
+        g.fillRect(Math.round(e.x - 3), Math.round(e.y - 10), 6, 2);
+        if (!e.searched) {
+          const f = Math.abs(Math.sin(t * 8 + e.x));
+          g.fillStyle = '#f0a83c';
+          g.fillRect(Math.round(e.x - 8), Math.round(e.y - 13 - f), 2, 2 + f);
+          g.fillRect(Math.round(e.x + 6), Math.round(e.y - 13 - f), 2, 2 + f);
+          g.fillStyle = 'rgba(255,180,80,0.12)';
+          g.beginPath();
+          g.arc(e.x, e.y - 8, 14, 0, TAU);
+          g.fill();
+        }
         break;
       }
       case 'camp': {

@@ -20,6 +20,11 @@ export const PAINTS = [
   { id: 'crimson', name: 'Crimson', tint: 'rgba(142,47,47,0.38)', cost: 150 },
   { id: 'emerald', name: 'Emerald', tint: 'rgba(46,110,78,0.38)', cost: 150 },
   { id: 'royal', name: 'Royal Blue', tint: 'rgba(58,78,142,0.38)', cost: 150 },
+  // Unlock-only paints (collection & achievement rewards).
+  { id: 'gilded', name: 'Gilded', tint: 'rgba(224,179,69,0.35)', unlock: true },
+  { id: 'abyssal', name: 'Abyssal', tint: 'rgba(30,20,60,0.5)', unlock: true },
+  { id: 'navywhite', name: 'Admiralty White', tint: 'rgba(240,240,235,0.4)', unlock: true },
+  { id: 'gold', name: 'Dragonhoard Gold', tint: 'rgba(255,200,60,0.45)', unlock: true },
 ];
 
 export class ShipState {
@@ -36,7 +41,16 @@ export class ShipState {
 
   get maxHull() { return 100 + this.levels.hull * 40; }
   get maxSail() { return 60 + this.levels.sails * 10; }
-  get cannonsPerSide() { return 2 + this.levels.cannons; }
+
+  /** Equipped legendary relic id (Part 3), or null. */
+  get relic() {
+    return this.game.inventory?.equipment?.relic ?? null;
+  }
+
+  get cannonsPerSide() {
+    return 2 + this.levels.cannons + (this.relic === 'ghostCannon' ? 1 : 0);
+  }
+
   get cannonDamage() { return 15 + this.levels.cannons * 4; }
   get cargoSlots() { return 12 + this.levels.storage * 6; }
   get crewCapacity() { return 2 + this.levels.crew * 2; }
@@ -45,7 +59,12 @@ export class ShipState {
   get speedMult() {
     const crewBonus = this.game.crew ? this.game.crew.bonuses().sail : 0;
     const sailDamagePenalty = 0.55 + 0.45 * (this.sailHp / this.maxSail);
-    return (1 + this.levels.sails * 0.08 + crewBonus) * sailDamagePenalty;
+    let relicBonus = 0;
+    if (this.relic === 'phoenixSail') relicBonus += 0.12;
+    if (this.relic === 'stormLantern' && this.game.weather?.rain > 0.2) relicBonus += 0.15;
+    const daily = this.game.daily?.modifier?.speed ?? 1;
+    const prestige = 1 + (this.game.prestige ?? 0) * 0.02;
+    return (1 + this.levels.sails * 0.08 + crewBonus + relicBonus) * sailDamagePenalty * daily * prestige;
   }
 
   get turnMult() { return 1 + this.levels.rudder * 0.1; }
@@ -63,8 +82,9 @@ export class ShipState {
     this._reload = Math.max(0, this._reload - dt);
     this._sinceHit += dt;
     // Out of combat, the crew patches small leaks for free.
+    const regenRate = this.relic === 'phoenixSail' ? 2.6 : 0.8;
     if (this._sinceHit > 14 && this.hull < this.maxHull) {
-      this.hull = Math.min(this.maxHull, this.hull + dt * 0.8);
+      this.hull = Math.min(this.maxHull, this.hull + dt * regenRate);
     }
     if (this._sinceHit > 14 && this.sailHp < this.maxSail) {
       this.sailHp = Math.min(this.maxSail, this.sailHp + dt * 0.5);

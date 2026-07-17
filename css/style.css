@@ -1579,3 +1579,181 @@ html, body {
   .panel { max-height: 92vh; }
   .hud-bars { width: 130px; }
 }
+
+/* ==================================================================
+   Part 3: legends, log book, factions, homestead
+   ================================================================== */
+
+.boss-bar {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 70vw);
+  text-align: center;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.boss-name {
+  color: #f05a78;
+  font-weight: bold;
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #1e1a22;
+  margin-bottom: 4px;
+}
+
+.boss-hp {
+  height: 10px;
+  background: rgba(10, 16, 30, 0.8);
+  border: 2px solid #f05a78;
+}
+
+.boss-hp .fill {
+  height: 100%;
+  background: linear-gradient(90deg, #b4304a, #f05a78);
+  transition: width 0.2s;
+}
+
+.relic-arrow::after {
+  border-bottom-color: #f0a83c !important;
+  top: -54px !important;
+}
+
+.col-cat {
+  margin-bottom: 12px;
+}
+
+.col-entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.col-entry {
+  background: rgba(8, 14, 26, 0.7);
+  border: 1px solid rgba(110, 74, 42, 0.5);
+  color: rgba(206, 194, 166, 0.4);
+  font-size: 10px;
+  padding: 2px 7px;
+  letter-spacing: 0.5px;
+}
+
+.col-entry.found {
+  color: #4ec9b0;
+  border-color: rgba(78, 201, 176, 0.5);
+}
+
+.ach-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 8px;
+  background: rgba(8, 14, 26, 0.5);
+  border: 2px solid rgba(110, 74, 42, 0.35);
+  margin-bottom: 5px;
+}
+
+.ach-row.done {
+  border-color: rgba(240, 208, 144, 0.5);
+}
+
+.ach-check {
+  font-size: 18px;
+  color: #f0d090;
+  width: 24px;
+  text-align: center;
+}
+
+.ach-info { flex: 1; }
+
+.ach-name {
+  font-weight: bold;
+  color: var(--parchment);
+  font-size: 13px;
+}
+
+.ach-desc {
+  color: var(--parchment-dim);
+  font-size: 11px;
+}
+
+.ach-bar {
+  height: 4px;
+  background: rgba(90, 165, 240, 0.2);
+  margin-top: 4px;
+  max-width: 220px;
+}
+
+.ach-bar div {
+  height: 100%;
+  background: #5aa5f0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 20px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(224, 179, 69, 0.12);
+  color: var(--parchment);
+  font-size: 12px;
+}
+
+.stat-row span { color: var(--parchment-dim); }
+
+.fact-row {
+  margin-bottom: 12px;
+}
+
+.fact-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 3px;
+}
+
+.fact-bar {
+  position: relative;
+  height: 8px;
+  background: rgba(8, 14, 26, 0.8);
+  border: 1px solid rgba(110, 74, 42, 0.5);
+}
+
+.fact-bar div { height: 100%; opacity: 0.75; }
+
+.fact-bar i {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 1px;
+  height: 10px;
+  background: rgba(232, 221, 196, 0.5);
+}
+
+.fact-desc {
+  color: var(--parchment-dim);
+  font-size: 11px;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.trophy-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.locker-btn { font-size: 10px; }
+
+@media (max-width: 700px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .boss-bar { top: 60px; }
+}

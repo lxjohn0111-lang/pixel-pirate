@@ -160,6 +160,7 @@ export class Quests {
     game.resources.coins += q.reward.gold;
     game.player.addXp(q.reward.xp);
     game.events.emit('resources:changed', { ...game.resources });
+    game.events.emit('quest:completed', { ...q, faction: q.type === 'hunt' ? 'navy' : 'merchants' });
     game.events.emit('quests:changed');
     game.events.emit('sfx', 'quest');
     game.hud.toast(`Contract complete: ${q.name} (+${q.reward.gold} gold)`, '#6fce62');
