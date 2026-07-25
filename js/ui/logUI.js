@@ -163,6 +163,24 @@ export class LogUI {
     body.querySelector('.chart-btn')?.addEventListener('click', () => {
       if (daily.claimChart()) this.render();
     });
+
+    // Once today's free chart is spent, a second one is available to
+    // anyone willing to watch for it.
+    if (daily.state.chartClaimed && this.game.ads.canOffer('dailyChart')) {
+      const row = document.createElement('div');
+      row.className = 'quest-row ad-row';
+      row.innerHTML = `<div class="quest-info">
+        <div class="quest-name">Another Heading</div>
+        <div class="quest-desc">A second treasure charted, on today's tide.</div>
+      </div>`;
+      row.appendChild(this.game.ads.button('dailyChart', 'Chart another', () => {
+        this.game.encounters.chartTreasure();
+        this.game.hud.toast('A second treasure is charted!', '#f0a83c');
+        this.game.events.emit('sfx', 'quest');
+        this.render();
+      }));
+      body.querySelector('.chart-btn')?.closest('.quest-row')?.after(row);
+    }
   }
 
   _locker(body) {

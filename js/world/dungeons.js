@@ -369,15 +369,18 @@ export class Dungeon extends Boarding {
       }
       game.events.emit('dungeon:cleared', { theme: this.entrance.theme });
       game.collection.discover('locations', `dungeon:${this.entrance.theme}`);
-      game.openLoot(`${this.theme.name} — Vault`, loot, game.ship.x, game.ship.y);
-      setTimeout(() => {
-        game.showMessage('A Weathered Tablet', pick(rng, LORE), 'Recorded in your collection.');
-      }, 700);
+      game.openLoot(`${this.theme.name} — Vault`, loot, game.ship.x, game.ship.y, () => {
+        setTimeout(() => {
+          game.showMessage('A Weathered Tablet', pick(rng, LORE), 'Recorded in your collection.');
+          game._offerCrewRescue();
+        }, 400);
+      });
     } else {
       // stumble back to the boat, bruised
       game.player.health = Math.max(1, Math.round(game.player.maxHealth * 0.35));
       game.events.emit('player:changed');
       game.hud.toast('You barely crawl back to the daylight...', '#e05a4a');
+      game._offerCrewRescue();
     }
   }
 

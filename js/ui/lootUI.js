@@ -29,8 +29,14 @@ export class LootUI {
     this.el = null;
   }
 
-  /** Show rolled loot; taking it grants everything. */
-  showLoot(title, drops, onTaken) {
+  /**
+   * Show rolled loot; taking it grants everything.
+   * opts.doubleAd — an inline rewarded-ad button (built by the caller)
+   * that doubles this haul. Shown only for hauls worth doubling, so the
+   * offer reads as a bonus rather than a nag.
+   * opts.after — runs once the modal is dismissed.
+   */
+  showLoot(title, drops, onTaken, opts = {}) {
     const rare = RARITY[bestRarity(drops)];
     const rows = drops.items.map((it) => {
       const def = ITEMS[it.id];
@@ -49,12 +55,22 @@ export class LootUI {
       <div class="modal loot-modal ${rare.glow ? 'loot-shine' : ''}" style="--shine:${rare.color}">
         <h3>${title}</h3>
         <div class="loot-list">${gold}${rows || (drops.gold ? '' : '<p class="loot-empty">Nothing but seaweed...</p>')}</div>
+        <div class="loot-actions"></div>
         <button class="btn btn-primary take-btn">Take All</button>
       </div>`);
+
+    if (opts.doubleAd) el.querySelector('.loot-actions').appendChild(opts.doubleAd);
+
     el.querySelector('.take-btn').addEventListener('click', () => {
       this.close();
       onTaken();
+      opts.after?.();
     });
+  }
+
+  /** Re-render an already-open loot modal (used after doubling). */
+  refreshLoot(title, drops, onTaken, opts = {}) {
+    this.showLoot(title, drops, onTaken, opts);
   }
 
   /** Yes/no recruit offer for a rescued or hired pirate. */

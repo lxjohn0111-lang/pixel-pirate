@@ -101,10 +101,17 @@ export class AudioManager {
     return { src, filter, gain: g };
   }
 
+  /** Hard mute for ad breaks (CrazyGames requires silence during ads). */
+  setMuted(muted) {
+    this.muted = muted;
+    if (!this.started) return;
+    this.master.gain.value = muted ? 0 : this.game.settings.master;
+  }
+
   _applyVolumes() {
     if (!this.started) return;
     const s = this.game.settings;
-    this.master.gain.value = s.master;
+    this.master.gain.value = this.muted ? 0 : s.master;
     this.sfxBus.gain.value = s.sfx;
     this.musicBus.gain.value = s.music * 0.6;
     this.ambientBus.gain.value = 0.9;

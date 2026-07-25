@@ -1757,3 +1757,150 @@ html, body {
   .stats-grid { grid-template-columns: 1fr; }
   .boss-bar { top: 60px; }
 }
+
+/* ==================================================================
+   Rewarded ads: offer modal, blocking curtain, inline buttons
+   ================================================================== */
+
+.ad-offer {
+  border-color: #5a4a20;
+  box-shadow: 0 0 26px rgba(240, 168, 60, 0.22),
+              0 8px 0 rgba(0, 0, 0, 0.4),
+              inset 0 0 0 2px var(--wood);
+}
+
+.ad-badge {
+  align-self: center;
+  background: rgba(240, 168, 60, 0.14);
+  border: 2px solid rgba(240, 168, 60, 0.5);
+  color: var(--gold);
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+}
+
+.ad-icon {
+  font-size: 40px;
+  line-height: 1;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.45));
+  animation: adIconIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@keyframes adIconIn {
+  from { transform: scale(0.4) rotate(-12deg); opacity: 0; }
+}
+
+.ad-body {
+  color: var(--parchment-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ad-reward {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: rgba(8, 14, 26, 0.65);
+  border: 2px solid rgba(240, 168, 60, 0.45);
+  padding: 9px 12px;
+}
+
+.ad-reward span {
+  color: var(--parchment-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.ad-reward b {
+  color: var(--gold);
+  font-size: 15px;
+}
+
+/* Inline "watch for a bonus" buttons inside existing panels. */
+.ad-inline-btn {
+  background: linear-gradient(180deg, #8a6a22, #6e5219);
+  border-color: #4a3610;
+  color: #f6e6bc;
+}
+
+.ad-inline-btn:disabled {
+  background: var(--wood);
+  border-color: var(--wood-dark);
+}
+
+.ad-play {
+  color: var(--gold);
+  font-size: 9px;
+}
+
+.loot-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.loot-actions:empty {
+  display: none;
+}
+
+.ad-row {
+  border-color: rgba(240, 168, 60, 0.45) !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Curtain shown while an ad is actually playing. */
+.ad-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 18, 0.88);
+  color: var(--parchment);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  animation: fadeIn 0.2s ease;
+}
+
+.ad-curtain-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px;
+  max-width: 420px;
+}
+
+.ad-sim-note {
+  color: var(--parchment-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.ad-spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgba(224, 179, 69, 0.25);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: adSpin 0.9s linear infinite;
+}
+
+@keyframes adSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-icon, .ad-spinner { animation: none; }
+}
+
+@media (max-width: 700px) {
+  .ad-row { flex-direction: column; align-items: stretch; }
+}

@@ -151,6 +151,23 @@ export class PortUI {
           </div>`;
         }).join('') || '<p class="empty-note">Nothing to sell.</p>'}
       </div>`;
+    // Free careening — genuinely useful exactly when repairs hurt most:
+    // a battered hull and an empty purse.
+    if (missing > 0 && game.ads.canOffer('freeRepair')) {
+      const row = document.createElement('div');
+      row.className = 'harbor-repair ad-row';
+      row.innerHTML = `<span>🔨 Careen the hull for free<br>
+        <span class="hint-inline">The shipwright owes a favor — no gold needed.</span></span>`;
+      row.appendChild(game.ads.button('freeRepair', 'Free full repair', () => {
+        st.repair(st.maxHull);
+        st.sailHp = st.maxSail;
+        game.events.emit('sfx', 'repair');
+        game.hud.toast('Hull and sails made whole — free of charge.', '#6fce62');
+        this.render();
+      }));
+      body.querySelector('.harbor-repair').after(row);
+    }
+
     body.querySelector('.deed-btn')?.addEventListener('click', () => {
       if (game.resources.coins < 2500) return;
       if (game.homestead.claimNear(this.port)) {

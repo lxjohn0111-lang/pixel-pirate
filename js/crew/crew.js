@@ -54,6 +54,8 @@ export class CrewSystem {
   constructor(game, saved) {
     this.game = game;
     this.members = saved?.map((m) => ({ ...m })) ?? [];
+    /** Crew lost in the current battle, pending a possible rescue. */
+    this.fallen = [];
     this._regenTimer = 6;
   }
 
@@ -102,9 +104,28 @@ export class CrewSystem {
     const i = this.members.findIndex((m) => m.id === id);
     if (i >= 0) {
       const [dead] = this.members.splice(i, 1);
+      // Held aside so the surgeon still has a chance to save them once
+      // the fighting stops (see the rewarded-ad offer in game.js).
+      this.fallen.push(dead);
       this.game.events.emit('crew:died', { name: dead.name });
       this.game.events.emit('crew:changed');
     }
+  }
+
+  /** Bring back everyone who fell in the last battle. */
+  reviveFallen() {
+    const revived = this.fallen.splice(0, this.fallen.length);
+    for (const m of revived) {
+      if (this.members.length >= this.capacity) break;
+      m.health = Math.max(1, Math.round(m.maxHealth * 0.5));
+      this.members.push(m);
+    }
+    if (revived.length) this.game.events.emit('crew:changed');
+    return revived;
+  }
+
+  clearFallen() {
+    this.fallen.length = 0;
   }
 
   update(dt) {

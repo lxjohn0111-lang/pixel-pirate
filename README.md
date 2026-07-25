@@ -165,6 +165,41 @@ Then open <http://localhost:8000>.
   night glow, localized event fog, and auto-aim assist that includes
   legendary targets. Still 60 FPS.
 
+## Rewarded ads (CrazyGames SDK)
+
+Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/intro/)
+(`js/ads/ads.js`). The rule the module enforces is that an ad is always a
+*favour to the player*, never a toll:
+
+- **Nothing is gated.** Declining leaves you exactly where the game would
+  have put you anyway. There are no timers to skip and no lives to buy.
+- **Offers appear only where you already care.** They fire at the game's
+  genuinely painful or greedy moments, or sit as a quiet button inside a
+  menu you opened yourself. Nothing ever interrupts sailing.
+- **Cooldowns per placement plus a 40 s global gap**, so a disastrous run
+  can't become a wall of offers.
+- **The reward is stated before the ad**, and granted only on the SDK's
+  `adFinished`. On `adError` nothing is granted (per CrazyGames policy)
+  and no extra punishment is applied either.
+
+| Placement | Moment | Reward |
+| --------- | ------ | ------ |
+| Save the ship | Hull reaches 0 | Full hull + sails, and keep the 15% gold you'd have lost |
+| Save the crew | After a boarding or dungeon where crew fell | Revive them — otherwise the loss is permanent |
+| Rally | Driven off an enemy deck | Full health, and keep the 10% gold |
+| Double the haul | Inside the loot popup, rare+ or 40+ gold only | Twice the gold and items |
+| Free careening | At a port with a damaged hull | Full repair, no gold |
+| Another heading | Log → Daily, once the free chart is spent | A second charted treasure |
+
+Also wired: `gameplayStart` / `gameplayStop` around menus, pauses and ad
+breaks; audio hard-muted for the duration of an ad (only from `adStarted`,
+as required); and `happytime()` on boss kills.
+
+The host page supplies the SDK script (`index.html`). Where it isn't
+present — local dev, itch.io, the single-file build — the manager falls
+back to a **clearly labelled simulation** so the flow stays testable; it
+never pretends a real ad was shown, and never silently rewards as if one had been.
+
 ## Architecture
 
 ```
@@ -202,6 +237,7 @@ js/
 ├── combat/
 │   ├── shipcombat.js    broadsides, projectiles, sinking, drops
 │   └── boarding.js      deck-to-deck real-time combat
+├── ads/ads.js           CrazyGames rewarded ads + offer gating
 ├── crew/crew.js         crew members, traits, bonuses
 ├── quests/quests.js     procedural contracts
 ├── meta/                long-term progression (Part 3)

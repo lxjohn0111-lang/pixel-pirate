@@ -53,6 +53,7 @@ import { TreasureHunts } from '../systems/treasurehunt.js';
 import { Homestead } from '../world/homestead.js';
 import { LogUI } from '../ui/logUI.js';
 import { HomeUI } from '../ui/homeUI.js';
+import { AdManager } from '../ads/ads.js';
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -98,6 +99,7 @@ export class Game {
     this.particles = new Particles();
     this.input = new Input(this.events, this.uiRoot);
     this.audio = new AudioManager(this);
+    this.ads = new AdManager(this);
 
     // ---- Part 2 state ---------------------------------------------------
     this.shipState = new ShipState(this, save?.shipState);
@@ -168,6 +170,12 @@ export class Game {
     this.homeUI = new HomeUI(this.uiRoot, this);
     this._applyPaint();
 
+    // Rewarded ads. Initialization is async and entirely optional — the
+    // game is fully playable before (and without) it ever resolving.
+    this.ads.init().then(() => this.ads.setGameplayActive(this.state === 'playing'));
+    // A real milestone deserves the site's confetti.
+    this.events.on('boss:defeated', () => this.ads.happytime());
+
     // Give returning captains their fishing rod; the sea provides.
     if (this.inventory.totalCount('fishingRod') === 0) {
       this.inventory.addAnywhere('fishingRod', 1);
@@ -203,6 +211,7 @@ export class Game {
 
     this.state = 'playing';
     this._lastTs = performance.now();
+    this.ads.setGameplayActive(true);
     requestAnimationFrame((ts) => this._frame(ts));
   }
 
@@ -213,9 +222,10 @@ export class Game {
     return Math.min(5, Math.floor(Math.hypot(x, y) / 2600));
   }
 
-  /** True while a blocking dialog is up (loot, port, recruit...). */
+  /** True while a blocking dialog is up (loot, port, recruit, ad...). */
   get uiBlocked() {
-    return this.lootUI?.isOpen || this.portUI?.isOpen || this.homeUI?.isOpen;
+    return this.lootUI?.isOpen || this.portUI?.isOpen || this.homeUI?.isOpen
+      || this.ads?.isOpen;
   }
 
   /** Where the equipped relic points (Golden Compass / Treasure Locator). */
@@ -324,8 +334,29 @@ export class Game {
   }
 
   /** Show the loot popup; granting happens on Take All. */
-  openLoot(title, drops, x, y) {
-    this.lootUI.showLoot(title, drops, () => this.grantLoot(drops, this.ship.x, this.ship.y - 20));
+  openLoot(title, drops, x, y, after) {
+    const show = () => {
+      // Doubling is offered only on hauls that are actually worth it,
+      // so the button reads as a windfall instead of a nag.
+      const worthDoubling = drops.gold >= 40
+        || RARITY_ORDER.indexOf(bestRarity(drops)) >= 2;
+      const canOffer = worthDoubling && this.ads.canOffer('doubleLoot');
+      const opts = { after };
+      if (canOffer) {
+        opts.doubleAd = this.ads.button('doubleLoot', 'Double this haul', () => {
+          drops.gold *= 2;
+          for (const it of drops.items) it.qty *= 2;
+          this.hud.toast('The hold is twice as heavy!', '#f0a83c');
+          this.events.emit('sfx', 'chest');
+          // Re-open showing the doubled contents, minus the used offer.
+          this.lootUI.showLoot(title, drops,
+            () => this.grantLoot(drops, this.ship.x, this.ship.y - 20), { after });
+        });
+      }
+      this.lootUI.showLoot(title, drops,
+        () => this.grantLoot(drops, this.ship.x, this.ship.y - 20), opts);
+    };
+    show();
   }
 
   offerRecruit(member, flavor) {
@@ -396,28 +427,85 @@ export class Game {
     drops.gold += 10 + aiShip.tier * 15; // the captain's purse
     this.player.addXp(20 + aiShip.tier * 12);
     this.combat.removeShip(aiShip.id);
-    this.openLoot(`${aiShip.label} — Captured Hold`, drops, this.ship.x, this.ship.y);
     // Sometimes a prisoner rows out of the hold.
-    if ((aiShip.type === 'pirate' || aiShip.type === 'navy') && Math.random() < 0.35) {
-      const member = createCrewMember((Math.random() * 0xffffffff) >>> 0, 1 + aiShip.tier);
-      setTimeout(() => this.offerRecruit(member, 'A freed prisoner offers to join you!'), 600);
-    }
+    const prisoner = (aiShip.type === 'pirate' || aiShip.type === 'navy') && Math.random() < 0.35
+      ? createCrewMember((Math.random() * 0xffffffff) >>> 0, 1 + aiShip.tier)
+      : null;
+    this.openLoot(`${aiShip.label} — Captured Hold`, drops, this.ship.x, this.ship.y, () => {
+      // Won the deck, but you may still have bodies to account for.
+      this._offerCrewRescue();
+      if (prisoner) {
+        setTimeout(() => this.offerRecruit(prisoner, 'A freed prisoner offers to join you!'), 600);
+      }
+    });
   }
 
   onBoardingLoss(aiShip) {
-    const lost = Math.floor(this.resources.coins * 0.1);
-    this.resources.coins -= lost;
-    this.player.health = Math.max(1, Math.round(this.player.maxHealth * 0.3));
-    this.events.emit('player:changed');
-    this.events.emit('resources:changed', { ...this.resources });
     aiShip.fleeing = true;
     aiShip.hostileToPlayer = false;
-    this.hud.toast(`Thrown back to your ship!${lost > 0 ? ` Lost ${lost} gold.` : ''}`, '#e05a4a');
+    const lost = Math.floor(this.resources.coins * 0.1);
+
+    const takeTheLoss = () => {
+      this.resources.coins -= lost;
+      this.player.health = Math.max(1, Math.round(this.player.maxHealth * 0.3));
+      this.events.emit('player:changed');
+      this.events.emit('resources:changed', { ...this.resources });
+      this.hud.toast(`Thrown back to your ship!${lost > 0 ? ` Lost ${lost} gold.` : ''}`, '#e05a4a');
+      this._offerCrewRescue();
+    };
+
+    this.ads.offer({
+      id: 'rally',
+      icon: '⚔',
+      title: 'Driven Back to the Rail',
+      body: 'You are bleeding on your own deck and they are cutting your purse. One last shout could rally the crew and save your coin.',
+      reward: `Full health${lost > 0 ? ` &middot; keep your ${lost} gold` : ''}`,
+      declineLabel: 'Fall back',
+      accept: () => {
+        this.player.health = this.player.maxHealth;
+        this.events.emit('player:changed');
+        this.hud.toast('You stagger up, whole — and the purse is still yours.', '#6fce62');
+        this.events.emit('sfx', 'victory');
+        this._offerCrewRescue();
+      },
+      decline: takeTheLoss,
+    });
+  }
+
+  /**
+   * Crew die permanently in boardings and dungeons — the single most
+   * painful loss in the game, and so the offer players most want.
+   * Presented only after the fighting stops.
+   */
+  _offerCrewRescue() {
+    const fallen = this.crew.fallen;
+    if (!fallen.length) return;
+    const names = fallen.map((m) => m.name).join(' and ');
+    const plural = fallen.length > 1;
+    this.ads.offer({
+      id: 'saveCrew',
+      icon: '✚',
+      title: plural ? 'They Still Have a Pulse' : `${fallen[0].name} Still Has a Pulse`,
+      body: plural
+        ? `The surgeon works fast, but they won't last the hour without supplies. Fetch what the surgeon needs and ${names} sail with you again — otherwise the sea keeps them.`
+        : `The surgeon works fast, but ${fallen[0].name} won't last the hour without supplies. Fetch what the surgeon needs and they sail with you again — otherwise the sea keeps them.`,
+      reward: plural ? `Revive ${fallen.length} fallen crew` : `Revive ${fallen[0].name}`,
+      declineLabel: 'Bury them at sea',
+      accept: () => {
+        const revived = this.crew.reviveFallen();
+        this.hud.toast(`${revived.map((m) => m.name).join(', ')} pulled through!`, '#6fce62');
+        this.events.emit('sfx', 'recruit');
+      },
+      decline: () => this.crew.clearFallen(),
+    });
   }
 
   /* ---- state -------------------------------------------------------- */
 
   togglePause() {
+    // An ad offer owns its own buttons: dismissing it any other way
+    // would skip the decline path and hand out a free pass.
+    if (this.ads?.isOpen) return;
     // Escape first closes any open panel.
     for (const panel of [this.lootUI, this.portUI, this.mapUI, this.inventoryUI, this.logUI, this.homeUI]) {
       if (panel?.isOpen) {
@@ -434,6 +522,7 @@ export class Game {
     this.state = 'paused';
     this.pauseMenu.show();
     this.audio.ctx?.suspend?.();
+    this.ads.setGameplayActive(false);
     this.events.emit('game:pause');
     this.save();
   }
@@ -443,6 +532,7 @@ export class Game {
     this.state = 'playing';
     this.pauseMenu.hide();
     this.audio.ctx?.resume?.();
+    this.ads.setGameplayActive(true);
     this.events.emit('game:resume');
     this._lastTs = performance.now();
   }
@@ -521,6 +611,9 @@ export class Game {
     this._updateDiscovery(dt);
     this._checkShipwreck();
     this._syncPaint();
+    // Menus and modals are breaks, not gameplay.
+    this.ads.setGameplayActive(!this.uiBlocked && !this.inventoryUI.isOpen
+      && !this.mapUI.isOpen && !this.logUI.isOpen);
 
     // Panel hotkeys.
     if (this.input.pressed('KeyI')) this.inventoryUI.toggle();
@@ -622,9 +715,6 @@ export class Game {
   _checkShipwreck() {
     if (this.shipState.hull > 0) return;
     // Going down! Dramatic, costly, but not run-ending.
-    const lost = Math.floor(this.resources.coins * 0.15);
-    this.resources.coins -= lost;
-    this.shipState.hull = Math.round(this.shipState.maxHull * 0.4);
     this.particles.burstSplash(this.ship.x, this.ship.y, 24);
     this.particles.burstSplinters(this.ship.x, this.ship.y, 16);
     this.camera.addShake(6);
@@ -632,9 +722,33 @@ export class Game {
     this.ship.velX = 0;
     this.ship.velY = 0;
     this.events.emit('sfx', 'sink');
-    this.events.emit('resources:changed', { ...this.resources });
-    this.events.emit('playership:damaged', { hull: this.shipState.hull });
-    this.hud.toast(`The crew barely kept her afloat!${lost > 0 ? ` Lost ${lost} gold.` : ''}`, '#e05a4a');
+    // Stop the loop re-firing while the offer is up.
+    this.shipState.hull = Math.round(this.shipState.maxHull * 0.4);
+
+    const lost = Math.floor(this.resources.coins * 0.15);
+    const sink = () => {
+      this.resources.coins -= lost;
+      this.events.emit('resources:changed', { ...this.resources });
+      this.events.emit('playership:damaged', { hull: this.shipState.hull });
+      this.hud.toast(`The crew barely kept her afloat!${lost > 0 ? ` Lost ${lost} gold.` : ''}`, '#e05a4a');
+    };
+
+    this.ads.offer({
+      id: 'saveShip',
+      icon: '⚓',
+      title: 'She\'s Going Down!',
+      body: 'The pumps are losing. Rally every hand to the breach and you can still save her — and the gold in the hold.',
+      reward: `Full hull repair${lost > 0 ? ` &middot; keep your ${lost} gold` : ''}`,
+      declineLabel: 'Let her list',
+      accept: () => {
+        this.shipState.hull = this.shipState.maxHull;
+        this.shipState.sailHp = this.shipState.maxSail;
+        this.events.emit('playership:damaged', { hull: this.shipState.hull });
+        this.hud.toast('The breach is patched — she sails on, whole!', '#6fce62');
+        this.events.emit('sfx', 'repair');
+      },
+      decline: sink,
+    });
   }
 
   /* ---- persistence ------------------------------------------------------ */
