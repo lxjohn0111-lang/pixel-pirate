@@ -199,6 +199,30 @@ export class AudioManager {
     osc.stop(t + decay + 0.05);
   }
 
+  /**
+   * A single typewriter blip, pitched to the speaker so you can tell
+   * who is talking with your eyes shut.
+   */
+  speakBlip(voice) {
+    if (!this.started || this.ctx.state !== 'running' || !voice) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = voice.pitch < 120 ? 'sine' : 'square';
+    const f = voice.pitch + (Math.random() - 0.5) * (voice.wobble ?? 20);
+    osc.frequency.setValueAtTime(f, t);
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = 1400;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.035, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+    osc.connect(filt);
+    filt.connect(g);
+    g.connect(this.sfxBus);
+    osc.start(t);
+    osc.stop(t + 0.06);
+  }
+
   /** One-shot sound effects. */
   play(name) {
     if (!this.started || this.ctx.state !== 'running') return;
@@ -420,6 +444,13 @@ export class AudioManager {
       case 'cast': {
         this._noiseBurst(3000, 0.14, t, 0.06, 'highpass');
         this._blip(520, 0.05, t + 0.15, 'sine', 0.05);
+        break;
+      }
+      case 'chapter': {
+        // A low swell under a rising fifth — a page turning.
+        this._noiseBurst(220, 1.6, t, 0.14, 'lowpass');
+        [196, 294, 392].forEach((f, i) => this._blip(f, 0.9, t + i * 0.18, 'triangle', 0.09));
+        this._thump(70, 0.9, t, 0.22);
         break;
       }
       case 'dungeon': {

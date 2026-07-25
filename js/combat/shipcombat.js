@@ -98,6 +98,15 @@ export class ShipCombat {
             done = true;
           }
         }
+        // Legendary creatures (Part 3) get first refusal on player shots.
+        // A boss shares the water with whatever else is sailing, and a
+        // world event can park four hulls on top of it — testing ships
+        // first meant the chaff soaked the entire broadside and the beast
+        // sat untouched at point-blank range.
+        if (!done && b.from === 'player' && game.legends?.hitTest(b)) {
+          game.events.emit('cannon:hit');
+          done = true;
+        }
         if (!done) {
           for (const s of this.ships) {
             if (s.id === b.from || s.state !== 'sailing') continue;
@@ -115,11 +124,6 @@ export class ShipCombat {
               break;
             }
           }
-        }
-        // Legendary creatures are targets too (Part 3).
-        if (!done && b.from === 'player' && game.legends?.hitTest(b)) {
-          game.events.emit('cannon:hit');
-          done = true;
         }
       }
 
@@ -176,9 +180,13 @@ export class ShipCombat {
         target = s;
       }
     }
-    // Legends (kraken tentacles, serpents) take priority when closer.
+    // A surfaced legend outranks every other target. nearestTarget already
+    // gates on its own range, so if it answers, the beast is on top of you
+    // — and during a world event there is always some blockade sloop nearer
+    // than the kraken, which would otherwise walk your broadside off the
+    // boss and make the fight unwinnable through no fault of the player.
     const legendAim = game.legends?.nearestTarget?.(ship.x, ship.y);
-    if (legendAim && dist2(legendAim.x, legendAim.y, ship.x, ship.y) < bestD) {
+    if (legendAim) {
       target = { x: legendAim.x, y: legendAim.y, heading: 0, speed: 0 };
     }
     if (target) {

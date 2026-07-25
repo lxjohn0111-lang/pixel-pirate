@@ -66,11 +66,18 @@ class Kraken {
     this.t += dt;
     const { ship } = game;
 
-    // The body drifts to keep the player inside the tentacle ring.
+    // The body drifts to keep the player inside the tentacle ring, and
+    // closes hard once they slip past gun range. Without the ramp there is
+    // a dead band between the 300px broadside reach and the 1400px
+    // disengage where a coasting ship can neither hit it nor shake it, and
+    // the fight just hangs. Top speed stays under SHIP.maxSpeed (130), so
+    // running for it on full sail is still a real escape — you just have
+    // to actually commit to the run.
     const d = Math.hypot(ship.x - this.x, ship.y - this.y);
     if (d > 60) {
-      this.x += ((ship.x - this.x) / d) * 14 * dt;
-      this.y += ((ship.y - this.y) / d) * 14 * dt;
+      const chase = 14 + Math.min(1, (d - 60) / 320) * 81;
+      this.x += ((ship.x - this.x) / d) * chase * dt;
+      this.y += ((ship.y - this.y) / d) * chase * dt;
     }
 
     // Phase logic.

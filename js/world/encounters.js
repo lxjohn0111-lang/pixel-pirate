@@ -188,6 +188,7 @@ export class Encounters {
       case 'lockedChest':
         return this.game.inventory.totalCount('rustyKey') > 0 ? 'Unlock the chest (uses Rusty Key)' : 'Locked chest (needs a Rusty Key)';
       case 'camp': return 'Search the camp';
+      case 'kingdom': return 'Descend into the drowned city';
       case 'treasure': return 'Haul up the treasure!';
       case 'dungeon': {
         const names = { temple: 'ancient temple', cave: 'sea cave', volcano: 'smoking cavern', ruins: 'sunken ruins', hideout: 'pirate hideout' };
@@ -211,7 +212,21 @@ export class Encounters {
     switch (e.kind) {
       case 'wreck': {
         consume();
-        game.openLoot('Shipwreck', rollLoot(rng, 'wreck', luck), e.x, e.y);
+        const drops = rollLoot(rng, 'wreck', luck);
+        if (e.storyFlag) {
+          // A story wreck always yields its chart fragment.
+          drops.items.push({ id: 'treasureFragment', qty: 1 });
+          game.openLoot('The Gracechurch\'s Boat', drops, e.x, e.y, () => {
+            game.story.onSiteSearched(e.storyFlag);
+          });
+        } else {
+          game.openLoot('Shipwreck', drops, e.x, e.y);
+        }
+        break;
+      }
+      case 'kingdom': {
+        consume();
+        game.story.onSiteSearched(e.storyFlag);
         break;
       }
       case 'raft': {
@@ -418,6 +433,28 @@ export class Encounters {
         g.arc(Math.round(e.x), Math.round(e.y + bob), 11, 0, TAU);
         g.fill();
         g.drawImage(spr, Math.round(e.x - spr.width / 2), Math.round(e.y - spr.height / 2 + bob));
+        break;
+      }
+      case 'kingdom': {
+        // A ring of drowned spires, lit from below. Unmistakable.
+        const pulse = 0.4 + Math.sin(t * 1.4) * 0.2;
+        g.fillStyle = `rgba(78,201,176,${pulse * 0.3})`;
+        g.beginPath();
+        g.arc(e.x, e.y, 46 + Math.sin(t) * 4, 0, TAU);
+        g.fill();
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * TAU + t * 0.06;
+          const sx = Math.round(e.x + Math.cos(a) * 30);
+          const sy = Math.round(e.y + Math.sin(a) * 20);
+          const h = 10 + (i % 3) * 7;
+          g.fillStyle = '#1e3a34';
+          g.fillRect(sx - 2, sy - h, 5, h);
+          g.fillStyle = `rgba(122,224,204,${0.4 + Math.sin(t * 2 + i) * 0.25})`;
+          g.fillRect(sx - 2, sy - h, 5, 2);
+          g.fillRect(sx - 1, sy - h + 4, 1, 3);
+        }
+        g.fillStyle = `rgba(122,224,204,${pulse})`;
+        g.fillRect(Math.round(e.x) - 1, Math.round(e.y) - 1, 3, 3);
         break;
       }
       case 'dungeon': {

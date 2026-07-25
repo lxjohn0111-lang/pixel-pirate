@@ -54,6 +54,8 @@ import { Homestead } from '../world/homestead.js';
 import { LogUI } from '../ui/logUI.js';
 import { HomeUI } from '../ui/homeUI.js';
 import { AdManager } from '../ads/ads.js';
+import { Dialogue } from '../story/dialogue.js';
+import { Story } from '../story/story.js';
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -168,6 +170,9 @@ export class Game {
     this.lootUI = new LootUI(this.uiRoot, this);
     this.logUI = new LogUI(this.uiRoot, this);
     this.homeUI = new HomeUI(this.uiRoot, this);
+    // The campaign gives the world a reason and doubles as the tutorial.
+    this.dialogue = new Dialogue(this.uiRoot, this);
+    this.story = new Story(this, save?.story);
     this._applyPaint();
 
     // Rewarded ads. Initialization is async and entirely optional — the
@@ -213,6 +218,14 @@ export class Game {
     this._lastTs = performance.now();
     this.ads.setGameplayActive(true);
     requestAnimationFrame((ts) => this._frame(ts));
+
+    // Open on Maddox rowing out of the wreckage; returning captains
+    // just get their current heading back.
+    if (!this.story.started) {
+      setTimeout(() => this.story.begin(), 500);
+    } else if (!this.story.complete) {
+      this.hud.showObjective(this.story.objectiveText());
+    }
   }
 
   /* ---- helpers shared across Part 2 systems ---------------------------- */
@@ -225,7 +238,7 @@ export class Game {
   /** True while a blocking dialog is up (loot, port, recruit, ad...). */
   get uiBlocked() {
     return this.lootUI?.isOpen || this.portUI?.isOpen || this.homeUI?.isOpen
-      || this.ads?.isOpen;
+      || this.ads?.isOpen || this.dialogue?.isOpen;
   }
 
   /** Where the equipped relic points (Golden Compass / Treasure Locator). */
@@ -568,6 +581,16 @@ export class Game {
       return;
     }
 
+    // A scene stops the world but not the sea: `this.time` still
+    // advances, so waves, gulls and light keep moving behind the
+    // portrait while nothing can sail into you mid-sentence.
+    if (this.dialoguePaused) {
+      this.particles.update(dt);
+      this.audio.update(dt);
+      this.input.endFrame();
+      return;
+    }
+
     this.dayNight.update(dt, this.events);
     this.weather.update(dt, this.events);
 
@@ -580,6 +603,7 @@ export class Game {
     this.encounters.update(dt);
     this.quests.update(dt);
     this.treasureHunts.update();
+    this.story.update(dt);
     this.stats.update(dt);
     this.achievements.update(dt);
     this.daily.update();
@@ -783,6 +807,7 @@ export class Game {
       homestead: this.homestead.serialize(),
       legends: this.legends.serialize(),
       treasureHunts: this.treasureHunts.serialize(),
+      story: this.story.serialize(),
       mapData: {
         explored: [...this.mapData.explored],
         islands: this.mapData.islands,

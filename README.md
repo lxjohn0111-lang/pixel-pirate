@@ -165,6 +165,46 @@ Then open <http://localhost:8000>.
   night glow, localized event fog, and auto-aim assist that includes
   legendary targets. Still 60 FPS.
 
+## The story layer
+
+The systems were all there, but nothing told you *why* to use them. "The
+Gracechurch Debt" is a six-chapter campaign whose job is to be a tutorial
+that never admits it is one: every chapter hands you an objective that can
+only be finished by learning one system, and the next chapter opens the
+moment you do.
+
+| Chapter | Teaches |
+| ------- | ------- |
+| The Debt | Sailing, the compass heading, searching a wreck |
+| Make Port | Docking, merchants, the tavern |
+| Red Ketch | Ship combat and boarding |
+| Beneath the Stone | Dungeons |
+| Six Pieces | Treasure fragments from every source in the game |
+| The Drowned Court | The finale, and what the debt actually was |
+
+**Talking portraits.** Five characters are drawn as 64×64 pixel faces
+(`js/render/portrait.js`) — procedurally, like everything else here, so
+there are still no image assets. Each face is assembled from skin, jaw,
+brows, eyes, nose, beard, mouth, scar, hair and headwear layers, and an
+expression table drives brow height, brow tilt, eyelid opening and mouth
+shape. They blink on an irregular cycle and their mouths articulate while
+text is typing, so a scene reads as somebody speaking rather than a text
+box with a picture next to it. Each character also has a voice — pitch,
+wobble and rate — driving the typing blips.
+
+**The stage** (`js/story/dialogue.js`) is a ship's-log page pinned to the
+lower third with a carved portrait frame and a brass nameplate straddling
+its edge. Scenes are arrays of beats: a spoken line, a branch with choices,
+or a chapter title card. During a scene the world freezes — but the sea
+does not: waves, gulls and light keep moving behind the portrait, so
+nothing can sail into you mid-sentence and nothing looks paused.
+
+**Barks.** One-line hints from your first mate play *over* live gameplay in
+a small framed portrait at the edge of the screen — they never take control.
+Freezing the world to tell someone their hull is leaking is how a hint turns
+into an interruption. Barks are contextual and fire once each: low hull,
+first crew member, nightfall, heavy weather, rod in the hold, first leviathan.
+
 ## Rewarded ads (CrazyGames SDK)
 
 Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/intro/)
@@ -238,6 +278,10 @@ js/
 │   ├── shipcombat.js    broadsides, projectiles, sinking, drops
 │   └── boarding.js      deck-to-deck real-time combat
 ├── ads/ads.js           CrazyGames rewarded ads + offer gating
+├── story/               the campaign layer
+│   ├── story.js         six chapters, goals, markers, contextual barks
+│   ├── dialogue.js      the dialogue stage: beats, typing, choices, barks
+│   └── characters.js    the cast: faces and voices
 ├── crew/crew.js         crew members, traits, bonuses
 ├── quests/quests.js     procedural contracts
 ├── meta/                long-term progression (Part 3)
@@ -254,6 +298,7 @@ js/
 │   ├── water.js         the animated ocean field
 │   ├── sprites.js       procedural sprite factory
 │   ├── pirate.js        layered captain sprite + appearance options
+│   ├── portrait.js      64×64 expressive character portraits
 │   ├── decor.js         swaying island decorations
 │   └── particles.js     particles + floating text
 ├── audio/audio.js       WebAudio soundscape + generative music

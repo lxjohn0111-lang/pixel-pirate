@@ -38,6 +38,11 @@ export class HUD {
         <div class="quest-arrow hidden"></div>
         <div class="quest-arrow relic-arrow hidden"></div>
       </div>
+      <div class="objective hidden">
+        <div class="obj-head"><span class="obj-eyebrow">Your Heading</span></div>
+        <div class="obj-text"></div>
+        <div class="obj-hint"></div>
+      </div>
       <div class="boss-bar hidden">
         <div class="boss-name"></div>
         <div class="boss-hp"><div class="fill"></div></div>
@@ -65,6 +70,9 @@ export class HUD {
     this.needle = this.el.querySelector('.compass-needle');
     this.questArrow = this.el.querySelector('.quest-arrow:not(.relic-arrow)');
     this.relicArrow = this.el.querySelector('.relic-arrow');
+    this.objEl = this.el.querySelector('.objective');
+    this.objText = this.el.querySelector('.obj-text');
+    this.objHint = this.el.querySelector('.obj-hint');
     this.bossBar = this.el.querySelector('.boss-bar');
     this.bossName = this.el.querySelector('.boss-name');
     this.bossFill = this.el.querySelector('.boss-hp .fill');
@@ -153,6 +161,39 @@ export class HUD {
     }
   }
 
+  /* ---- objective tracker ------------------------------------------- */
+
+  /** Show a new objective, with a one-line hint that fades after a while. */
+  showObjective(text, hint) {
+    if (!text) return this.hideObjective();
+    this.objText.textContent = text;
+    this._objLast = text;
+    this.objHint.textContent = hint ?? '';
+    this.objHint.classList.toggle('hidden', !hint);
+    this.objEl.classList.remove('hidden');
+    this.objEl.classList.remove('pulse');
+    void this.objEl.offsetWidth;
+    this.objEl.classList.add('pulse');
+    clearTimeout(this._hintTimer);
+    if (hint) this._hintTimer = setTimeout(() => this.objHint.classList.add('faded'), 14000);
+    else this.objHint.classList.remove('faded');
+  }
+
+  /** Cheap per-tick refresh for counters like "3/6 fragments". */
+  updateObjective(text) {
+    if (!text || text === this._objLast) return;
+    this._objLast = text;
+    this.objText.textContent = text;
+    this.objEl.classList.remove('tick');
+    void this.objEl.offsetWidth;
+    this.objEl.classList.add('tick');
+  }
+
+  hideObjective() {
+    this.objEl.classList.add('hidden');
+    this._objLast = null;
+  }
+
   toast(text, color = '#e8ddc4') {
     const t = document.createElement('div');
     t.className = 'toast';
@@ -182,11 +223,15 @@ export class HUD {
     const deg = (game.ship.heading * 180) / Math.PI + 90;
     this.needle.style.transform = `translate(-50%,-100%) rotate(${deg}deg)`;
 
-    // guide arrow to the nearest contract objective
-    const q = game.quests.trackedTarget();
-    if (q) {
-      const a = Math.atan2(q.y - game.ship.y, q.x - game.ship.x);
+    // Guide arrow: the story's heading takes priority over contracts,
+    // so the player is never left wondering where to point the bow.
+    const storyMark = game.story?.trackedTarget();
+    const guide = storyMark ?? game.quests.trackedTarget();
+    const isStory = !!storyMark;
+    if (guide) {
+      const a = Math.atan2(guide.y - game.ship.y, guide.x - game.ship.x);
       this.questArrow.classList.remove('hidden');
+      this.questArrow.classList.toggle('story', isStory);
       this.questArrow.style.transform = `translate(-50%,-50%) rotate(${(a * 180) / Math.PI + 90}deg)`;
     } else {
       this.questArrow.classList.add('hidden');
