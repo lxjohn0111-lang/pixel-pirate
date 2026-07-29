@@ -113,7 +113,7 @@ export class Ports {
       // the only readout of port control the player gets while at sea,
       // so it goes on the quay itself rather than in a menu.
       const owner = this.game.clans?.portOwner(port);
-      const clan = owner ? CLANS[owner] : null;
+      const clan = owner ? this.game.clans.def(owner) : null;
       if (clan) {
         const banner = clanBanner(clan, 14, 22);
         for (let i = 0; i < 2; i++) {

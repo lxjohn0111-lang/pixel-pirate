@@ -137,6 +137,11 @@ export const REP_PERKS = [
   { at: 100, text: 'They will sail with you as sworn allies.' },
 ];
 
+/** A clan holds its harbours until its fleet strength falls below this. */
+const CLAIM_STRENGTH = 45;
+/** What the garrison wants to change sides. */
+const CLAIM_COST = 5000;
+
 export function regionKey(x, y) {
   return `${Math.round(x / REGION_SIZE)},${Math.round(y / REGION_SIZE)}`;
 }
@@ -256,8 +261,10 @@ export class Clans {
   priceMult(shopKey, port = null) {
     const owner = port ? this.portOwner(port) : null;
     let mult = 1;
-    if (owner) {
-      const r = this.rep[owner];
+    if (owner === 'player') {
+      mult = 0.75; // your own harbour charges you the best price there is
+    } else if (owner) {
+      const r = this.rep[owner] ?? 0;
       mult *= clamp(1 - r * 0.0025, 0.75, 1.3);
     }
     if (shopKey === 'black') mult *= 1.0; // the port UI already marks black-market goods up
@@ -361,6 +368,16 @@ export class Clans {
     return best;
   }
 
+  /**
+   * Resolve a clan id to its definition. Harbours the player has taken
+   * report an owner of 'player', which is not in the CLANS table — every
+   * consumer that wants a name or a colour goes through here.
+   */
+  def(id) {
+    if (id === 'player') return this.playerClan;
+    return CLANS[id] ?? null;
+  }
+
   /** Clan that controls a port (falls back to its region). */
   portOwner(port) {
     if (!port) return null;
@@ -455,6 +472,63 @@ export class Clans {
       this.game.hud?.toast(`${CLANS[winner].name} has taken ${name}!`, CLANS[winner].color);
     }
     this.game.events.emit('clan:portcaptured', { portKey, winner, loser, name });
+  }
+
+  /* ---- taking a harbour ------------------------------------------------ */
+
+  /**
+   * Can this port be claimed for the player's clan, and if not, why?
+   * A harbour changes hands when its holder's grip slips — which is what
+   * sinking their ships and their lost wars actually do to `strength`.
+   * That makes "conquer a region" a consequence of ordinary play rather
+   * than a separate button.
+   */
+  claimCheck(port) {
+    const owner = this.portOwner(port);
+    if (!this.playerClan) {
+      return { ok: false, reason: 'You have no colours of your own to raise here.' };
+    }
+    if (owner === 'player') return { ok: false, reason: 'This harbour already flies your flag.' };
+    const strength = this.strength[owner] ?? 100;
+    if (strength >= CLAIM_STRENGTH) {
+      return {
+        ok: false,
+        reason: `${CLANS[owner].name} still holds this coast firmly.`,
+        need: `Break their fleet below ${CLAIM_STRENGTH} — sink their ships. (Now ${strength})`,
+        strength,
+      };
+    }
+    if (this.game.resources.coins < CLAIM_COST) {
+      return {
+        ok: false,
+        reason: `The garrison wants ${CLAIM_COST} gold to change sides.`,
+        need: `${CLAIM_COST - this.game.resources.coins} more gold`,
+        strength,
+      };
+    }
+    return { ok: true, cost: CLAIM_COST, owner, strength };
+  }
+
+  claimPort(port) {
+    const check = this.claimCheck(port);
+    if (!check.ok) return false;
+    const loser = check.owner;
+    this.game.resources.coins -= CLAIM_COST;
+    this.ports.set(String(port.seed), 'player');
+    this.strength[loser] = Math.max(10, this.strength[loser] - 8);
+    this.add(loser, -18);
+    this._note(`${this.playerClan.short} takes ${port.name} from ${CLANS[loser].short}.`);
+    this.game.events.emit('resources:changed', { ...this.game.resources });
+    this.game.events.emit('clan:portclaimed', { port, loser });
+    this.game.events.emit('sfx', 'victory');
+    this.game.hud.notify(`${port.name} is yours.`, {
+      kind: 'flag',
+      detail: `${this.playerClan.name} now holds ${this.portCount('player')} harbour(s).`,
+      color: this.playerClan.color,
+      hold: 7000,
+    });
+    this.game.save();
+    return true;
   }
 
   /* ---- the player's own clan ------------------------------------------ */

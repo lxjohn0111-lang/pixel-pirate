@@ -11,7 +11,7 @@
 
 import { ITEMS, RARITY, itemIcon } from '../items/itemdefs.js';
 import { UPGRADES, PAINTS } from '../entities/shipstate.js';
-import { HULLS, HULL_ORDER, HULL_STATS, hullUnlocked } from '../entities/ships.js';
+import { HULLS, HULL_ORDER, HULL_STATS, hullUnlocked, hullRepOk } from '../entities/ships.js';
 import { createCrewMember, TRAITS, crewRole, hashId, RANKS } from '../crew/crew.js';
 import { mulberry32, rangeInt } from '../util/random.js';
 import { drawPirate } from '../render/pirate.js';
@@ -163,7 +163,7 @@ export class PortUI {
     if (!this.port) return; // nothing to draw until we have docked somewhere
     const district = DISTRICTS.find((d) => d.id === this.view);
     const ownerId = game.clans?.portOwner(this.port) ?? null;
-    const clan = ownerId ? CLANS[ownerId] : null;
+    const clan = ownerId ? game.clans.def(ownerId) : null;
     // Standing with the harbour's owner is what actually moves prices,
     // so it belongs in the header next to the purse.
     const mult = ownerId ? game.clans.priceMult('general', this.port) : 1;
@@ -182,7 +182,7 @@ export class PortUI {
             <div>
               <span>Held by</span>
               <b>${clan.name}</b>
-              <i>${game.clans.label(ownerId)}${discount ? ` · ${discount}% off` : ''}</i>
+              <i>${ownerId === 'player' ? 'Your colours' : game.clans.label(ownerId)}${discount ? ` · ${discount}% off` : ''}</i>
             </div>
           </div>` : ''}
           <div class="port-head-right">
@@ -440,6 +440,7 @@ export class PortUI {
   _renderHarbour(body) {
     const { game } = this;
     const st = game.shipState;
+    const ownerId = game.clans?.portOwner(this.port) ?? null;
     const missing = Math.ceil(st.maxHull - st.hull);
     const cost = Math.ceil(missing * 0.8);
     const sellables = [];
@@ -471,6 +472,22 @@ export class PortUI {
                <button class="btn wide deed-btn" ${game.resources.coins < 2500 ? 'disabled' : ''}>Buy the deed — 2500 gold</button>`}
         </section>
       </div>
+      ${game.clans.playerClan && ownerId !== 'player' ? (() => {
+        const claim = game.clans.claimCheck(this.port);
+        return `<section class="port-card claim-card ${claim.ok ? 'ready' : ''}">
+          <h3>Take This Harbour</h3>
+          ${claim.ok
+            ? `<p class="port-note">${game.clans.def(claim.owner).name} cannot hold it. The garrison
+               will change sides for ${claim.cost} gold.</p>
+               <button class="btn wide claim-btn">Claim ${this.port.name} — ${claim.cost} gold</button>`
+            : `<p class="port-note">${claim.reason}</p>
+               ${claim.need ? `<p class="claim-need">${claim.need}</p>` : ''}
+               ${claim.strength !== undefined ? `<div class="claim-bar">
+                 <i style="width:${Math.min(100, (claim.strength / 100) * 100)}%"></i>
+                 <em style="left:45%"></em></div>
+                 <p class="port-note">The mark is where their grip fails.</p>` : ''}`}
+        </section>`;
+      })() : ''}
       ${game.clans.playerClan ? `
         <section class="port-card own-clan" style="--clan:${game.clans.playerClan.color}">
           <div class="own-clan-head">
@@ -534,6 +551,9 @@ export class PortUI {
     const ownBadge = body.querySelector('.own-clan-badge');
     if (ownBadge) ownBadge.getContext('2d').drawImage(clanBadge(game.clans.playerClan, 40), 0, 0);
     body.querySelector('.found-btn')?.addEventListener('click', () => this._openFounding());
+    body.querySelector('.claim-btn')?.addEventListener('click', () => {
+      if (game.clans.claimPort(this.port)) this.render();
+    });
     body.querySelector('.repair-btn')?.addEventListener('click', () => {
       if (missing <= 0 || game.resources.coins < cost) return;
       game.resources.coins -= cost;
@@ -721,7 +741,9 @@ export class PortUI {
     const owned = st.ownedHulls.includes(pickId);
     const current = st.hullDef;
     const gate = hullUnlocked(pickId, game);
+    const repGate = hullRepOk(pickId, game);
     const afford = game.resources.coins >= pick.cost;
+    const nextGoal = HULL_ORDER.find((h) => !st.ownedHulls.includes(h)) ?? null;
 
     const compare = HULL_STATS.map((s) => {
       const mine = current[s.key];
@@ -740,20 +762,42 @@ export class PortUI {
     body.innerHTML = `
       <div class="yard">
         <aside class="yard-list">
-          ${HULL_ORDER.map((id) => {
+          <div class="yard-list-head">Fleet Progression</div>
+          ${HULL_ORDER.map((id, i) => {
             const h = HULLS[id];
             const isOwned = st.ownedHulls.includes(id);
             const isCurrent = st.hullId === id;
             const g2 = hullUnlocked(id, game);
-            return `<button class="yard-item ${id === pickId ? 'active' : ''} ${g2.ok ? '' : 'locked'}" data-hull="${id}">
-              <span class="yard-item-top">
-                <b>${h.name}</b>
-                ${isCurrent ? '<i class="tag now">Sailing</i>'
-                  : isOwned ? '<i class="tag owned">Owned</i>'
-                  : g2.ok ? `<i class="tag price">${h.cost}g</i>`
-                  : '<i class="tag locked">🔒</i>'}
+            const r2 = hullRepOk(id, game);
+            const reachable = g2.ok && r2.ok;
+            // The next rung: the first hull you do not own. Marking it is
+            // the whole point of a tree — "this is what you are working
+            // toward" should never need working out.
+            const isNext = id === nextGoal;
+            return `<button class="yard-node ${id === pickId ? 'active' : ''}
+              ${reachable ? '' : 'locked'} ${isOwned ? 'owned' : ''} ${isNext ? 'next' : ''}" data-hull="${id}">
+              ${i ? '<span class="yard-link"></span>' : ''}
+              <span class="yard-node-row">
+                <span class="yard-rung">${i + 1}</span>
+                <span class="yard-node-main">
+                  <span class="yard-item-top">
+                    <b>${h.name}</b>
+                    ${isCurrent ? '<i class="tag now">Sailing</i>'
+                      : isOwned ? '<i class="tag owned">Owned</i>'
+                      : !reachable ? '<i class="tag locked">Locked</i>'
+                      : `<i class="tag price">${h.cost}g</i>`}
+                  </span>
+                  <span class="yard-item-bar"><i style="width:${Math.round((h.hull / 600) * 100)}%"></i></span>
+                  <span class="yard-node-req">${
+                    isOwned ? 'In your fleet'
+                      : !g2.ok ? `Needs ${g2.label} (${g2.have}/${g2.need})`
+                      : !r2.ok ? `Needs ${r2.label} (now ${r2.have >= 0 ? '+' : ''}${r2.have})`
+                      : game.resources.coins >= h.cost ? 'Available now'
+                      : `${h.cost - game.resources.coins}g short`
+                  }</span>
+                </span>
               </span>
-              <span class="yard-item-bar"><i style="width:${Math.round((h.hull / 600) * 100)}%"></i></span>
+              ${isNext ? '<span class="yard-next-flag">Next</span>' : ''}
             </button>`;
           }).join('')}
         </aside>
@@ -776,7 +820,10 @@ export class PortUI {
                 ? '<p class="yard-status">This is the ship under your feet.</p>'
                 : '<button class="btn wide switch-btn">Move your flag to the ' + pick.name + '</button>')
               : !gate.ok
-                ? `<p class="yard-status locked">🔒 Requires ${gate.label} <span>(${gate.have}/${gate.need})</span></p>`
+                ? `<p class="yard-status locked">Requires ${gate.label} <span>(${gate.have}/${gate.need})</span></p>`
+                : !repGate.ok
+                  ? `<p class="yard-status locked">Requires the standing of ${repGate.label}
+                     <span>(now ${repGate.have >= 0 ? '+' : ''}${repGate.have})</span></p>`
                 : `<button class="btn wide buy-hull" ${afford ? '' : 'disabled'}>
                      ${afford ? `Commission her — ${pick.cost} gold` : `Need ${pick.cost - game.resources.coins} more gold`}
                    </button>`}

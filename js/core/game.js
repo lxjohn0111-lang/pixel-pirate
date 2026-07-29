@@ -32,6 +32,7 @@ import { Boarding } from '../combat/boarding.js';
 import { Encounters } from '../world/encounters.js';
 import { Ports } from '../world/ports.js';
 import { Quests } from '../quests/quests.js';
+import { MainQuest } from '../quests/mainquest.js';
 import { InventoryUI } from '../ui/inventoryUI.js';
 import { PortUI } from '../ui/portUI.js';
 import { MapUI } from '../ui/mapUI.js';
@@ -59,6 +60,7 @@ import { HomeUI } from '../ui/homeUI.js';
 import { AdManager } from '../ads/ads.js';
 import { Dialogue } from '../story/dialogue.js';
 import { Story } from '../story/story.js';
+import { Guide } from '../story/guide.js';
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -153,6 +155,10 @@ export class Game {
     this.bounties = new Bounties(this, save?.bounties);
     this.recruitment = new Recruitment(this);
     this.namedShips = this.registerSystem(new NamedShips(this, save?.namedShips));
+    // The long arc, and the voice that explains it. Both are registered
+    // after everything they read, so their goal checks never see a
+    // half-built game.
+    this.mainQuest = this.registerSystem(new MainQuest(this, save?.mainQuest));
     if (this.prestige > 0) this.cosmetics.unlock('flag', 'legend');
 
     // First voyage: a captain needs the basics.
@@ -183,6 +189,7 @@ export class Game {
     // The campaign gives the world a reason and doubles as the tutorial.
     this.dialogue = new Dialogue(this.uiRoot, this);
     this.story = new Story(this, save?.story);
+    this.guide = this.registerSystem(new Guide(this, save?.guide));
     this._applyPaint();
 
     // Rewarded ads. Initialization is async and entirely optional — the
@@ -853,6 +860,8 @@ export class Game {
       treasureHunts: this.treasureHunts.serialize(),
       bounties: this.bounties.serialize(),
       namedShips: this.namedShips.serialize(),
+      mainQuest: this.mainQuest.serialize(),
+      guide: this.guide.serialize(),
       story: this.story.serialize(),
       mapData: {
         explored: [...this.mapData.explored],

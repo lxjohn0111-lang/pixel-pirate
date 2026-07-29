@@ -371,6 +371,85 @@ last one. The margin notes whose water you are heading into — the only
 hard intelligence on an otherwise unreliable document. Hoards can hold
 clan relics, ship parts and cosmetics as well as gold.
 
+## Guidance and progression
+
+The sandbox got large. This layer exists so nobody has to wonder what to
+do with it.
+
+### The main quest
+
+An eight-chapter ladder to becoming **Pirate King**
+(`js/quests/mainquest.js`), running from the first minute to the last.
+It is deliberately not the story campaign — "The Gracechurch Debt" is a
+tutorial that teaches the systems and ends, while this never stops
+pointing somewhere.
+
+| # | Chapter | Goal |
+| - | ------- | ---- |
+| 1 | First Blood | Sink 3 hostile ships |
+| 2 | A Purse Worth Carrying | Earn 1,000 gold |
+| 3 | A Ship Worth The Name | Buy a bigger hull |
+| 4 | Hands To Sail Her | 4 crew aboard |
+| 5 | Make A Name | Claim 3 bounties |
+| 6 | Colours Of Your Own | Found your clan |
+| 7 | Break The Great Ships | Defeat 3 of the five |
+| 8 | Take The Sea | Claim 3 harbours |
+
+Every chapter measures something the player was already going to do, so
+the ladder narrates the sandbox rather than diverting it — no chapter
+spawns a fetch quest. Each pays gold and XP, and the last one crowns you.
+
+**Claiming harbours** makes the final chapter real: a clan holds its ports
+until its fleet strength falls below 45, which is exactly what sinking its
+ships and losing its wars does. Weaken one and the garrison at its harbour
+will change sides for 5,000 gold. The Harbour Office shows the holder's
+strength against the mark where their grip fails.
+
+### The quest tracker
+
+One panel, top centre, always answering "what now": the main quest chapter
+and its number, the objective, a progress bar with `2 / 5`, and the
+distance and bearing to wherever the chapter points. The story campaign
+rides underneath it as a secondary line while it is running, so there are
+never two panels competing to be read. The `?` button asks the bosun
+directly.
+
+### The Guide
+
+Bosun Maddox — already the story's first mate — is the mentor
+(`js/story/guide.js`). He speaks in barks, the small portrait at the
+screen edge that plays over live gameplay, because a mentor who freezes
+the world every time he has a thought is an interruption rather than a
+mentor.
+
+Three jobs, in priority order: introduce a feature the first time it is
+actually reachable (sailing, combat, clans, ports, the shipyard, bounties,
+crew, expeditions, customization, founding a clan, the great ships);
+narrate each new main-quest chapter; and if the player stalls — not moving
+for a while, rather than merely not pressing keys — suggest the next thing
+worth doing. Everything is once-only and rate-limited.
+
+His recommendation prefers what is already in front of you: a running
+bounty clock beats being told to go be Pirate King.
+
+### The fleet progression tree
+
+The shipyard shows all six hulls as a numbered ladder with connectors:
+owned ones in green, the next rung flagged **Next** in gold, and every
+locked one stating exactly what it needs — `Needs Captain level 8 (3/8)`,
+`Needs 3 bounties claimed (0/3)`, or a standing requirement like *Ashen
+Company at +40*. Two hulls are gated on reputation as well as deeds, so
+the Frigate and Galleon need a clan to actually like you.
+
+### Notifications
+
+Top-centre stack with a coloured icon badge, headline and optional detail
+line, a dismiss **✕**, and a countdown bar that makes the auto-expiry
+visible so nothing vanishes without warning. At most three show at once —
+the oldest is pushed out — so a burst of pickups can never bury the one
+line that mattered. Every existing `toast()` call site got this for free;
+the icon is inferred from the colour and wording.
+
 ## Rewarded ads (CrazyGames SDK)
 
 Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/intro/)
@@ -451,11 +530,14 @@ js/
 ├── story/               the campaign layer
 │   ├── story.js         six chapters, goals, markers, contextual barks
 │   ├── dialogue.js      the dialogue stage: beats, typing, choices, barks
-│   └── characters.js    the cast: faces and voices
+│   ├── characters.js    the cast: faces and voices
+│   └── guide.js         the mentor: briefings, nudges, recommendations
 ├── crew/
 │   ├── crew.js          crew members, traits, roles, ranks, bonuses
 │   └── recruitment.js   the five ways a pirate joins your clan
-├── quests/quests.js     procedural contracts
+├── quests/
+│   ├── quests.js        procedural contracts
+│   └── mainquest.js     the eight-chapter road to Pirate King
 ├── meta/                long-term progression (Part 3)
 │   ├── stats.js         lifetime statistics (EventBus observers)
 │   ├── collection.js    the collection book + completion rewards

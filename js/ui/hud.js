@@ -6,6 +6,37 @@ import { hudCoinIcon, hudWoodIcon } from '../render/sprites.js';
 import { ITEMS, itemIcon } from '../items/itemdefs.js';
 import { QUICKBAR_SIZE } from '../items/inventory.js';
 
+/** How many notifications may stack before the oldest is pushed out. */
+const MAX_NOTES = 3;
+
+const NOTE_ICONS = {
+  info: '•',
+  gold: '◉',
+  quest: '❯',
+  combat: '✕',
+  loot: '◆',
+  clan: '⚑',
+  flag: '⚑',
+  crown: '♛',
+  warn: '!',
+  good: '✓',
+};
+
+/**
+ * Most callers pass only a colour, so the icon is inferred from that plus
+ * the wording. It keeps every existing toast() call site working while
+ * still getting a glyph that means something.
+ */
+function guessKind(text, color) {
+  const t = text.toLowerCase();
+  if (color === '#f0a83c' || /gold|bounty claimed|treasure|hoard/.test(t)) return 'gold';
+  if (color === '#e05a4a' || /sunk|hunt|sighted|lost|full|not enough/.test(t)) return 'warn';
+  if (color === '#6fce62' || /complete|repair|joins|whole|discovered/.test(t)) return 'good';
+  if (/collection|achievement/.test(t)) return 'quest';
+  if (/clan|war|takes|colours/.test(t)) return 'clan';
+  return 'info';
+}
+
 export class HUD {
   constructor(uiRoot, game) {
     this.game = game;
@@ -38,10 +69,26 @@ export class HUD {
         <div class="quest-arrow hidden"></div>
         <div class="quest-arrow relic-arrow hidden"></div>
       </div>
-      <div class="objective hidden">
-        <div class="obj-head"><span class="obj-eyebrow">Your Heading</span></div>
-        <div class="obj-text"></div>
-        <div class="obj-hint"></div>
+      <div class="hud-top">
+      <div class="tracker hidden">
+        <div class="trk-main">
+          <div class="trk-head">
+            <span class="trk-eyebrow">Main Quest</span>
+            <span class="trk-chapter"></span>
+            <button class="trk-help" title="What should I do?" aria-label="Ask the bosun">?</button>
+          </div>
+          <div class="trk-title"></div>
+          <div class="trk-objective"></div>
+          <div class="trk-bar"><i></i></div>
+          <div class="trk-foot"><span class="trk-progress"></span><span class="trk-dist"></span></div>
+        </div>
+        <div class="trk-side hidden">
+          <span class="trk-side-tag">Story</span>
+          <span class="trk-side-text"></span>
+        </div>
+        <div class="trk-hint"></div>
+      </div>
+      <div class="toasts"></div>
       </div>
       <div class="boss-bar hidden">
         <div class="boss-name"></div>
@@ -53,7 +100,6 @@ export class HUD {
       </div>
       <div class="quickbar"></div>
       <div class="interact-prompt hidden"></div>
-      <div class="toasts"></div>
       <div class="hint">${touch ? 'Drag to sail · tap ✕ to fire' : 'WASD sail · Space fire · F interact · I inventory · M map'}</div>
       ${touch ? `
       <div class="touch-actions">
@@ -74,9 +120,17 @@ export class HUD {
     this.needle = this.el.querySelector('.compass-needle');
     this.questArrow = this.el.querySelector('.quest-arrow:not(.relic-arrow)');
     this.relicArrow = this.el.querySelector('.relic-arrow');
-    this.objEl = this.el.querySelector('.objective');
-    this.objText = this.el.querySelector('.obj-text');
-    this.objHint = this.el.querySelector('.obj-hint');
+    this.trk = this.el.querySelector('.tracker');
+    this.trkChapter = this.el.querySelector('.trk-chapter');
+    this.trkTitle = this.el.querySelector('.trk-title');
+    this.trkObjective = this.el.querySelector('.trk-objective');
+    this.trkBar = this.el.querySelector('.trk-bar i');
+    this.trkProgress = this.el.querySelector('.trk-progress');
+    this.trkDist = this.el.querySelector('.trk-dist');
+    this.trkSide = this.el.querySelector('.trk-side');
+    this.trkSideText = this.el.querySelector('.trk-side-text');
+    this.trkHint = this.el.querySelector('.trk-hint');
+    this.el.querySelector('.trk-help').addEventListener('click', () => game.guide?.nudge());
     this.huntBar = this.el.querySelector('.hunt-bar');
     this.bossBar = this.el.querySelector('.boss-bar');
     this.bossName = this.el.querySelector('.boss-name');
@@ -166,49 +220,175 @@ export class HUD {
     }
   }
 
-  /* ---- objective tracker ------------------------------------------- */
+  /* ---- quest tracker ----------------------------------------------- */
+  //
+  // One panel answers "what now". The main quest is the backbone and is
+  // always shown; the story campaign — which is the tutorial and ends —
+  // rides as a secondary line while it is running. story.js still calls
+  // showObjective/updateObjective exactly as it always did.
 
-  /** Show a new objective, with a one-line hint that fades after a while. */
+  /** Story objective (the old API, unchanged for callers). */
   showObjective(text, hint) {
     if (!text) return this.hideObjective();
-    this.objText.textContent = text;
-    this._objLast = text;
-    this.objHint.textContent = hint ?? '';
-    this.objHint.classList.toggle('hidden', !hint);
-    this.objEl.classList.remove('hidden');
-    this.objEl.classList.remove('pulse');
-    void this.objEl.offsetWidth;
-    this.objEl.classList.add('pulse');
+    this._storyObj = text;
+    this.trkSideText.textContent = text;
+    this.trkSide.classList.remove('hidden');
+    this.trkHint.textContent = hint ?? '';
+    this.trkHint.classList.toggle('hidden', !hint);
+    this.trk.classList.remove('pulse');
+    void this.trk.offsetWidth;
+    this.trk.classList.add('pulse');
     clearTimeout(this._hintTimer);
-    if (hint) this._hintTimer = setTimeout(() => this.objHint.classList.add('faded'), 14000);
-    else this.objHint.classList.remove('faded');
+    if (hint) this._hintTimer = setTimeout(() => this.trkHint.classList.add('faded'), 16000);
+    else this.trkHint.classList.remove('faded');
   }
 
   /** Cheap per-tick refresh for counters like "3/6 fragments". */
   updateObjective(text) {
-    if (!text || text === this._objLast) return;
-    this._objLast = text;
-    this.objText.textContent = text;
-    this.objEl.classList.remove('tick');
-    void this.objEl.offsetWidth;
-    this.objEl.classList.add('tick');
+    if (!text || text === this._storyObj) return;
+    this._storyObj = text;
+    this.trkSideText.textContent = text;
+    this.trkSide.classList.remove('tick');
+    void this.trkSide.offsetWidth;
+    this.trkSide.classList.add('tick');
   }
 
   hideObjective() {
-    this.objEl.classList.add('hidden');
-    this._objLast = null;
+    this._storyObj = null;
+    this.trkSide.classList.add('hidden');
+    this.trkHint.classList.add('hidden');
   }
 
+  /**
+   * Redraw the tracker from the main quest. Called every frame; all the
+   * writes are guarded on change so it costs nothing when idle.
+   */
+  _updateTracker() {
+    const mq = this.game.mainQuest;
+    if (!mq) return;
+    const ch = mq.current;
+
+    if (!ch) {
+      // Crowned. The panel stays, because a king still wants a heading.
+      if (this._trkState !== 'done') {
+        this._trkState = 'done';
+        this.trk.classList.remove('hidden');
+        this.trkChapter.textContent = 'Complete';
+        this.trkTitle.textContent = 'Pirate King';
+        this.trkObjective.textContent = 'The sea is yours. Sail where you like.';
+        this.trkBar.style.width = '100%';
+        this.trkProgress.textContent = '';
+        this.trkDist.textContent = '';
+      }
+      return;
+    }
+
+    const p = mq.progress;
+    const pos = mq.position;
+    const key = `${ch.id}:${p.have}/${p.need}`;
+    this.trk.classList.remove('hidden');
+
+    if (this._trkState !== key) {
+      const chapterChanged = this._trkChapter !== ch.id;
+      this._trkState = key;
+      this._trkChapter = ch.id;
+      this.trkChapter.textContent = `${pos.index} of ${pos.total}`;
+      this.trkTitle.textContent = ch.title;
+      this.trkObjective.textContent = ch.objective;
+      this.trkProgress.textContent = `${p.have} / ${p.need}`;
+      this.trkBar.style.width = `${p.pct}%`;
+      if (chapterChanged) {
+        this.trk.classList.remove('pulse');
+        void this.trk.offsetWidth;
+        this.trk.classList.add('pulse');
+        // A fresh chapter carries its hint until the player moves on.
+        this.trkHint.textContent = ch.hint;
+        this.trkHint.classList.remove('hidden', 'faded');
+        clearTimeout(this._chHintTimer);
+        this._chHintTimer = setTimeout(() => this.trkHint.classList.add('faded'), 18000);
+      } else {
+        this.trkProgress.classList.remove('tick');
+        void this.trkProgress.offsetWidth;
+        this.trkProgress.classList.add('tick');
+      }
+    }
+
+    // Distance and bearing to wherever this chapter points.
+    const t = mq.trackedTarget();
+    if (t) {
+      const dx = t.x - this.game.ship.x;
+      const dy = t.y - this.game.ship.y;
+      const d = Math.round(Math.hypot(dx, dy));
+      const compass = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+      const dir = compass[(Math.round((Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8)];
+      const text = `${d > 999 ? `${(d / 1000).toFixed(1)}k` : d} ${dir}`;
+      if (this.trkDist.textContent !== text) this.trkDist.textContent = text;
+    } else if (this.trkDist.textContent) {
+      this.trkDist.textContent = '';
+    }
+  }
+
+  /* ---- notifications ------------------------------------------------ */
+  //
+  // Every system in the game funnels through toast(), so the modern
+  // presentation is built into notify() and toast() forwards to it — no
+  // call site has to change to get an icon, a dismiss button and a
+  // sensible queue.
+
+  /**
+   * @param {string} text  the headline
+   * @param {object} opts  { kind, detail, color, hold }
+   *   kind picks the icon glyph; detail is an optional second line.
+   */
+  notify(text, opts = {}) {
+    const color = opts.color ?? '#e8ddc4';
+    const kind = opts.kind ?? guessKind(text, color);
+    const hold = opts.hold ?? 4200;
+
+    const n = document.createElement('div');
+    n.className = 'note';
+    n.style.setProperty('--note', color);
+    n.innerHTML = `
+      <span class="note-icon">${NOTE_ICONS[kind] ?? NOTE_ICONS.info}</span>
+      <div class="note-body">
+        <span class="note-text"></span>
+        ${opts.detail ? '<span class="note-detail"></span>' : ''}
+      </div>
+      <button class="note-x" aria-label="Dismiss">✕</button>
+      <i class="note-timer"></i>`;
+    n.querySelector('.note-text').textContent = text;
+    if (opts.detail) n.querySelector('.note-detail').textContent = opts.detail;
+
+    const close = () => {
+      if (n.dataset.closing) return;
+      n.dataset.closing = '1';
+      clearTimeout(n._t);
+      n.classList.add('out');
+      setTimeout(() => n.remove(), 260);
+    };
+    n.querySelector('.note-x').addEventListener('click', (e) => {
+      e.stopPropagation();
+      close();
+    });
+    // The countdown bar is the auto-dismiss made visible, so a
+    // notification never vanishes without warning.
+    n.querySelector('.note-timer').style.animationDuration = `${hold}ms`;
+    n._t = setTimeout(close, hold);
+
+    this.toastsEl.appendChild(n);
+    // Oldest goes first when the stack is full — a burst of pickups must
+    // never bury the one line that mattered.
+    while (this.toastsEl.children.length > MAX_NOTES) {
+      const first = this.toastsEl.firstChild;
+      clearTimeout(first._t);
+      first.remove();
+    }
+    return n;
+  }
+
+  /** The long-standing API every system already calls. */
   toast(text, color = '#e8ddc4') {
-    const t = document.createElement('div');
-    t.className = 'toast';
-    t.style.borderColor = color;
-    t.style.color = color;
-    t.textContent = text;
-    this.toastsEl.appendChild(t);
-    setTimeout(() => t.classList.add('out'), 3400);
-    setTimeout(() => t.remove(), 4000);
-    while (this.toastsEl.children.length > 4) this.toastsEl.firstChild.remove();
+    return this.notify(text, { color });
   }
 
   showPrompt(text) {
@@ -225,6 +405,7 @@ export class HUD {
   /** Called every frame. */
   update() {
     const { game } = this;
+    this._updateTracker();
     const deg = (game.ship.heading * 180) / Math.PI + 90;
     this.needle.style.transform = `translate(-50%,-100%) rotate(${deg}deg)`;
 

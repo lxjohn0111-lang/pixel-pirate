@@ -66,6 +66,8 @@ export const HULLS = {
     crew: 7,
     scale: 1.34,
     unlock: { type: 'bounties', value: 3, label: '3 bounties claimed' },
+    // Navy lines come out of a navy yard: Ashen have to like you first.
+    repRequired: { clan: 'ashen', value: 40 },
   },
   galleon: {
     name: 'Galleon',
@@ -80,6 +82,8 @@ export const HULLS = {
     crew: 10,
     scale: 1.5,
     unlock: { type: 'bosses', value: 1, label: 'Defeat a leviathan' },
+    // The Consortium does not release a treasure hull to a stranger.
+    repRequired: { clan: 'goldwake', value: 55 },
   },
   manowar: {
     name: 'Man-o-War',
@@ -115,9 +119,24 @@ export function getHull(id) {
   return HULLS[id] ?? HULLS[DEFAULT_HULL];
 }
 
+/** Standing gate, separate from the unlock so both can be reported. */
+export function hullRepOk(id, game) {
+  const h = getHull(id);
+  if (!h.repRequired) return { ok: true };
+  const { clan, value } = h.repRequired;
+  const have = game.clans?.rep?.[clan] ?? 0;
+  return {
+    ok: have >= value,
+    clan,
+    value,
+    have,
+    label: `${game.clans?.def?.(clan)?.name ?? clan} at +${value}`,
+  };
+}
+
 /**
  * Is this hull's unlock condition met? Returns { ok, label }.
- * Gold is checked separately — this is only about eligibility.
+ * Gold and standing are checked separately — this is only eligibility.
  */
 export function hullUnlocked(id, game) {
   const h = getHull(id);
