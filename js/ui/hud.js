@@ -47,6 +47,10 @@ export class HUD {
         <div class="boss-name"></div>
         <div class="boss-hp"><div class="fill"></div></div>
       </div>
+      <div class="hunt-bar hidden">
+        <span class="hunt-tag">Hunting</span>
+        <div class="hunt-body"><div class="hunt-name"></div><div class="hunt-meta"></div></div>
+      </div>
       <div class="quickbar"></div>
       <div class="interact-prompt hidden"></div>
       <div class="toasts"></div>
@@ -73,6 +77,7 @@ export class HUD {
     this.objEl = this.el.querySelector('.objective');
     this.objText = this.el.querySelector('.obj-text');
     this.objHint = this.el.querySelector('.obj-hint');
+    this.huntBar = this.el.querySelector('.hunt-bar');
     this.bossBar = this.el.querySelector('.boss-bar');
     this.bossName = this.el.querySelector('.boss-name');
     this.bossFill = this.el.querySelector('.boss-hp .fill');
@@ -223,18 +228,33 @@ export class HUD {
     const deg = (game.ship.heading * 180) / Math.PI + 90;
     this.needle.style.transform = `translate(-50%,-100%) rotate(${deg}deg)`;
 
-    // Guide arrow: the story's heading takes priority over contracts,
-    // so the player is never left wondering where to point the bow.
+    // Guide arrow: the story's heading takes priority, then an active
+    // hunt, then contracts — so the player is never left wondering where
+    // to point the bow, and a bounty you are actively chasing outranks
+    // the errand you picked up three ports ago.
     const storyMark = game.story?.trackedTarget();
-    const guide = storyMark ?? game.quests.trackedTarget();
-    const isStory = !!storyMark;
+    const bountyMark = !storyMark ? game.bounties?.trackedTarget() : null;
+    const guide = storyMark ?? bountyMark ?? game.quests.trackedTarget();
     if (guide) {
       const a = Math.atan2(guide.y - game.ship.y, guide.x - game.ship.x);
       this.questArrow.classList.remove('hidden');
-      this.questArrow.classList.toggle('story', isStory);
+      this.questArrow.classList.toggle('story', !!storyMark);
+      this.questArrow.classList.toggle('bounty', !!bountyMark);
       this.questArrow.style.transform = `translate(-50%,-50%) rotate(${(a * 180) / Math.PI + 90}deg)`;
     } else {
       this.questArrow.classList.add('hidden');
+    }
+
+    // Hunt banner: name, rank and the clock you are racing.
+    const hunt = game.bounties?.active;
+    if (hunt) {
+      const d = Math.round(Math.hypot(hunt.x - game.ship.x, hunt.y - game.ship.y));
+      this.huntBar.classList.remove('hidden');
+      this.huntBar.querySelector('.hunt-name').textContent = hunt.name;
+      this.huntBar.querySelector('.hunt-meta').textContent =
+        `${'☠'.repeat(hunt.skulls)} · ${d} away · escapes in ${game.bounties.escapeClock}`;
+    } else {
+      this.huntBar.classList.add('hidden');
     }
 
     // relic senses: Golden Compass points to the unfound; the Treasure

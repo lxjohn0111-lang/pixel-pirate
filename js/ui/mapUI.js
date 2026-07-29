@@ -29,6 +29,7 @@ export class MapUI {
         <span><i style="background:#c8cdd2"></i> Port</span>
         <span><i style="background:#f0a83c"></i> Treasure</span>
         <span><i style="background:#6fce62"></i> Contract</span>
+        <span><i style="background:#e05a4a"></i> Bounty</span>
         <span><i style="background:#c9506a"></i> Marker</span>
         <span class="map-hint">Click the chart to place or remove a marker</span>
       </div>`;
@@ -217,6 +218,32 @@ export class MapUI {
       g.beginPath();
       g.arc(p.x, p.y, 8 + Math.sin(performance.now() / 300) * 2, 0, Math.PI * 2);
       g.stroke();
+    }
+
+    // the hunted captain — a moving skull, redrawn every frame because
+    // unlike every other mark on this chart, it does not stay put
+    const hunt = game.bounties?.active;
+    if (hunt) {
+      const p = this._toMap(hunt.x, hunt.y);
+      const pulse = 9 + Math.sin(performance.now() / 260) * 3;
+      g.strokeStyle = '#e05a4a';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(p.x, p.y, pulse, 0, Math.PI * 2);
+      g.stroke();
+      g.fillStyle = '#e8e4da';
+      g.beginPath();
+      g.arc(p.x, p.y - 1, 3.4, 0, Math.PI * 2);
+      g.fill();
+      g.fillRect(p.x - 2.6, p.y + 1.6, 5.2, 2.4);
+      g.fillStyle = '#1a1420';
+      g.fillRect(p.x - 2, p.y - 2, 1.5, 1.8);
+      g.fillRect(p.x + 0.6, p.y - 2, 1.5, 1.8);
+      g.fillStyle = '#e05a4a';
+      g.font = '7px monospace';
+      g.textAlign = 'center';
+      g.fillText(hunt.name, p.x, p.y + 15);
+      g.textAlign = 'left';
     }
 
     // custom markers (the home isle gets a golden flag)

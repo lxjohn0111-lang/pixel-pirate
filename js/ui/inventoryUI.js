@@ -5,13 +5,46 @@
 
 import { ITEMS, RARITY, itemIcon } from '../items/itemdefs.js';
 import { EQUIP_SLOTS } from '../items/inventory.js';
-import { TRAITS } from '../crew/crew.js';
+import { TRAITS, crewRole, hashId } from '../crew/crew.js';
 import { UPGRADES, PAINTS } from '../entities/shipstate.js';
-import { drawPirate } from '../render/pirate.js';
+import { HULLS, HULL_ORDER } from '../entities/ships.js';
+import { portraitCanvas, faceFromAppearance } from '../render/portrait.js';
+
 
 const SLOT_LABELS = {
   sword: 'Sword', pistol: 'Pistol', musket: 'Musket', hat: 'Hat', coat: 'Coat',
   boots: 'Boots', ring: 'Ring', necklace: 'Necklace', charm: 'Charm', relic: 'Relic',
+};
+
+/** Filter chips. Item `type` is the source of truth; these just group it. */
+const CATEGORIES = [
+  { id: 'all', name: 'All', icon: '▦', types: null },
+  { id: 'gear', name: 'Gear', icon: '⚔', types: ['weapon', 'armor'] },
+  { id: 'trinket', name: 'Trinkets', icon: '💍', types: ['trinket', 'special'] },
+  { id: 'supplies', name: 'Supplies', icon: '🍎', types: ['consumable', 'ammo'] },
+  { id: 'materials', name: 'Materials', icon: '🪵', types: ['resource', 'shippart'] },
+  { id: 'valuables', name: 'Valuables', icon: '💎', types: ['valuable', 'fish'] },
+];
+
+function matchesCategory(itemId, catId) {
+  const cat = CATEGORIES.find((c) => c.id === catId);
+  if (!cat || !cat.types) return true;
+  return cat.types.includes(ITEMS[itemId]?.type);
+}
+
+/** One label/value row, optionally with a bar behind it. */
+function statRow(label, value, frac = null, color = '#e0b345') {
+  return `<div class="stat-row">
+    <span>${label}</span>
+    ${frac !== null ? `<div class="stat-bar"><i style="width:${Math.max(0, Math.min(1, frac)) * 100}%;background:${color}"></i></div>` : ''}
+    <b>${value}</b>
+  </div>`;
+}
+
+/** Human labels for the raw stat keys on item definitions. */
+const STAT_LABELS = {
+  attack: 'attack', defense: 'defense', critChance: 'crit %',
+  maxHealth: 'max health', reloadSpeed: 'reload %', luck: 'luck', speed: 'speed',
 };
 
 export class InventoryUI {
@@ -19,6 +52,7 @@ export class InventoryUI {
     this.game = game;
     this.uiRoot = uiRoot;
     this.tab = 'inventory';
+    this.filter = 'all';
     this.el = document.createElement('div');
     this.el.className = 'panel captain-panel hidden';
     uiRoot.appendChild(this.el);
@@ -59,6 +93,9 @@ export class InventoryUI {
   /* ------------------------------------------------------------------ */
 
   render() {
+    // Any tooltip belongs to a cell that is about to be replaced, so it
+    // would otherwise hang around over whatever renders next.
+    this.tooltip.classList.add('hidden');
     const tabs = ['inventory', 'crew', 'ship'];
     const labels = { inventory: 'Inventory', crew: `Crew (${this.game.crew.members.length}/${this.game.crew.capacity})`, ship: 'Ship' };
     this.el.innerHTML = `
@@ -84,25 +121,57 @@ export class InventoryUI {
   _renderInventory(body) {
     const { game } = this;
     const p = game.player;
+    const bp = game.inventory.backpack;
+    const cargo = game.inventory.cargo;
+    const carried = bp.used + cargo.used;
+    const total = bp.slots.length + cargo.slots.length;
+    const worth = [...bp.slots, ...cargo.slots]
+      .reduce((n, s) => n + (s ? (ITEMS[s.id]?.value ?? 0) * s.qty : 0), 0);
+
     body.innerHTML = `
       <div class="inv-layout">
-        <div class="inv-left">
-          <div class="equip-grid"></div>
-          <div class="stats-list">
-            <div><span>Health</span><b>${Math.round(p.health)}/${p.maxHealth}</b></div>
-            <div><span>Attack</span><b>${p.attack}</b></div>
-            <div><span>Defense</span><b>${p.defense}</b></div>
-            <div><span>Crit</span><b>${p.critChance}%</b></div>
-            <div><span>Reload</span><b>+${p.reloadSpeed}%</b></div>
-            <div><span>Luck</span><b>${p.luck}</b></div>
-            <div class="stat-level"><span>Level ${p.level}</span><b>${p.xp}/${p.xpNext} XP</b></div>
-          </div>
-        </div>
+        <aside class="inv-left">
+          <section class="inv-panel">
+            <h4>Equipped</h4>
+            <div class="equip-grid"></div>
+          </section>
+          <section class="inv-panel">
+            <h4>Captain</h4>
+            <div class="stat-rows">
+              ${statRow('Health', `${Math.round(p.health)}/${p.maxHealth}`, p.health / p.maxHealth, '#6fce62')}
+              ${statRow('Attack', p.attack)}
+              ${statRow('Defense', p.defense)}
+              ${statRow('Crit', `${p.critChance}%`)}
+              ${statRow('Reload', `+${p.reloadSpeed}%`)}
+              ${statRow('Luck', p.luck)}
+            </div>
+            <div class="xp-row">
+              <div class="xp-head"><span>Level ${p.level}</span><b>${p.xp}/${p.xpNext} XP</b></div>
+              <div class="xp-bar"><i style="width:${Math.min(100, (p.xp / p.xpNext) * 100)}%"></i></div>
+            </div>
+          </section>
+        </aside>
         <div class="inv-right">
-          <div class="grid-head"><span>Backpack</span><button class="mini-btn sort-bp">Sort</button></div>
-          <div class="item-grid" data-container="backpack"></div>
-          <div class="grid-head"><span>Ship Hold (${game.inventory.cargo.used}/${game.inventory.cargo.slots.length})</span><button class="mini-btn sort-cargo">Sort</button></div>
-          <div class="item-grid" data-container="cargo"></div>
+          <div class="inv-toolbar">
+            <div class="cat-chips">
+              ${CATEGORIES.map((c) => `<button class="cat-chip ${c.id === this.filter ? 'active' : ''}"
+                data-cat="${c.id}" title="${c.name}"><span>${c.icon}</span>${c.name}</button>`).join('')}
+            </div>
+            <div class="inv-meta">
+              <span>${carried}/${total} slots</span>
+              <span class="inv-worth">${worth}g of cargo</span>
+              <button class="mini-btn sort-all">Sort</button>
+            </div>
+          </div>
+          <section class="inv-panel">
+            <div class="grid-head"><span>Backpack</span><i>${bp.used}/${bp.slots.length}</i></div>
+            <div class="item-grid" data-container="backpack"></div>
+          </section>
+          <section class="inv-panel">
+            <div class="grid-head"><span>Ship Hold</span><i>${cargo.used}/${cargo.slots.length}</i></div>
+            <div class="item-grid" data-container="cargo"></div>
+          </section>
+          <p class="inv-hint">Drag to move · double-click to equip or use · drag onto the quick bar for consumables</p>
         </div>
       </div>`;
 
@@ -113,16 +182,18 @@ export class InventoryUI {
       const cell = this._slotEl({ container: 'equip', slot }, id ? { id, qty: 1 } : null, SLOT_LABELS[slot]);
       eq.appendChild(cell);
     }
-    this._fillGrid(body.querySelector('[data-container="backpack"]'), game.inventory.backpack, 'backpack');
-    this._fillGrid(body.querySelector('[data-container="cargo"]'), game.inventory.cargo, 'cargo');
+    this._fillGrid(body.querySelector('[data-container="backpack"]'), bp, 'backpack');
+    this._fillGrid(body.querySelector('[data-container="cargo"]'), cargo, 'cargo');
 
-    body.querySelector('.sort-bp').addEventListener('click', () => {
-      game.inventory.backpack.sort();
+    body.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
+      // Clicking the active category clears it, so the filter is never a trap.
+      this.filter = this.filter === b.dataset.cat ? 'all' : b.dataset.cat;
       game.events.emit('sfx', 'ui');
       this.render();
-    });
-    body.querySelector('.sort-cargo').addEventListener('click', () => {
-      game.inventory.cargo.sort();
+    }));
+    body.querySelector('.sort-all').addEventListener('click', () => {
+      bp.sort();
+      cargo.sort();
       game.events.emit('sfx', 'ui');
       this.render();
     });
@@ -130,7 +201,13 @@ export class InventoryUI {
 
   _fillGrid(gridEl, container, name) {
     container.slots.forEach((s, i) => {
-      gridEl.appendChild(this._slotEl({ container: name, index: i }, s));
+      const cell = this._slotEl({ container: name, index: i }, s);
+      // Filtering dims rather than hides: slots keep their positions, so
+      // drag targets never move under the cursor mid-filter.
+      if (s && this.filter !== 'all' && !matchesCategory(s.id, this.filter)) {
+        cell.classList.add('dimmed');
+      }
+      gridEl.appendChild(cell);
     });
   }
 
@@ -146,7 +223,7 @@ export class InventoryUI {
       if (r.glow) cell.classList.add('glow');
       cell.innerHTML = `<img draggable="false" src="${itemIcon(item.id).toDataURL()}" alt="${def.name}">
         ${item.qty > 1 ? `<span class="qty">${item.qty}</span>` : ''}`;
-      cell.addEventListener('pointerenter', () => this._showTooltip(cell, item.id));
+      cell.addEventListener('pointerenter', () => this._showTooltip(cell, item.id, addr));
       cell.addEventListener('pointerleave', () => this.tooltip.classList.add('hidden'));
       cell.addEventListener('pointerdown', (e) => this._dragStart(e, addr, item));
       cell.addEventListener('dblclick', () => this._quickAction(addr, item));
@@ -156,20 +233,48 @@ export class InventoryUI {
     return cell;
   }
 
-  _showTooltip(cell, id) {
+  _showTooltip(cell, id, addr = null) {
     const def = ITEMS[id];
     const r = RARITY[def.rarity];
-    const stats = def.stats
-      ? Object.entries(def.stats).map(([k, v]) => `<div class="tt-stat">+${v} ${k === 'critChance' ? 'crit%' : k === 'maxHealth' ? 'max health' : k === 'reloadSpeed' ? 'reload%' : k}</div>`).join('')
-      : '';
+    // For anything wearable, compare against what is already in that slot
+    // — the useful question is never "what does this do", it is "is this
+    // better than mine".
+    const equippedId = def.slot ? this.game.inventory.equipment[def.slot] : null;
+    const comparing = def.slot && equippedId && equippedId !== id && addr?.container !== 'equip';
+    const equipped = comparing ? ITEMS[equippedId] : null;
+
+    const keys = new Set([
+      ...Object.keys(def.stats ?? {}),
+      ...Object.keys(equipped?.stats ?? {}),
+    ]);
+    const stats = [...keys].map((k) => {
+      const mine = def.stats?.[k] ?? 0;
+      const theirs = equipped?.stats?.[k] ?? 0;
+      const label = STAT_LABELS[k] ?? k;
+      if (!comparing) return `<div class="tt-stat">+${mine} ${label}</div>`;
+      const d = mine - theirs;
+      const cls = d > 0 ? 'up' : d < 0 ? 'down' : 'same';
+      const sign = d > 0 ? `+${d}` : d < 0 ? `${d}` : '±0';
+      return `<div class="tt-stat cmp ${cls}"><span>+${mine} ${label}</span><b>${sign}</b></div>`;
+    }).join('');
+
     const extra = def.heal ? `<div class="tt-stat">Restores ${def.heal} health</div>`
       : def.repair ? `<div class="tt-stat">Repairs ${def.repair} hull</div>` : '';
+    const action = def.slot ? 'double-click to equip'
+      : def.heal || def.repair || def.use ? 'double-click to use' : '';
+
     this.tooltip.innerHTML = `
-      <div class="tt-name" style="color:${r.color}">${def.name}</div>
-      <div class="tt-type">${r.name} ${def.slot ? SLOT_LABELS[def.slot] : def.type}</div>
-      ${stats}${extra}
+      <div class="tt-head" style="--rar:${r.color}">
+        <img class="tt-icon" src="${itemIcon(id).toDataURL()}" alt="">
+        <div>
+          <div class="tt-name" style="color:${r.color}">${def.name}</div>
+          <div class="tt-type">${r.name} · ${def.slot ? SLOT_LABELS[def.slot] : def.type}</div>
+        </div>
+      </div>
+      ${stats ? `<div class="tt-stats">${stats}</div>` : ''}${extra}
+      ${comparing ? `<div class="tt-vs">compared with ${equipped.name}</div>` : ''}
       <div class="tt-desc">${def.desc}</div>
-      <div class="tt-value">${def.value} gold${def.slot ? ' · double-click to equip' : def.heal || def.repair ? ' · double-click to use' : ''}</div>`;
+      <div class="tt-foot"><span class="tt-value">${def.value} gold</span>${action ? `<span class="tt-action">${action}</span>` : ''}</div>`;
     const rect = cell.getBoundingClientRect();
     this.tooltip.classList.remove('hidden');
     const tw = this.tooltip.offsetWidth;
@@ -321,37 +426,69 @@ export class InventoryUI {
 
   _renderCrew(body) {
     const { game } = this;
-    const rows = game.crew.members.map((m) => {
-      const traits = m.traits.map((t) => `<span class="trait" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('');
-      const frac = m.health / m.maxHealth;
-      return `<div class="crew-row" data-id="${m.id}">
-        <canvas class="crew-face" width="22" height="30" data-id="${m.id}"></canvas>
-        <div class="crew-info">
-          <div class="crew-name">${m.name} <span class="crew-lvl">Lv ${m.level}</span></div>
-          <div class="crew-hpbar"><div style="width:${Math.round(frac * 100)}%"></div></div>
-          <div class="crew-meta">${ITEMS[m.weapon]?.name ?? 'Fists'} · ${traits}</div>
-        </div>
-        <button class="mini-btn dismiss-btn" data-id="${m.id}">Dismiss</button>
-      </div>`;
-    }).join('');
+    const members = game.crew.members;
+    const b = game.crew.bonuses();
+    // What the crew is actually worth, stated once, so the cards read as
+    // people rather than as a list of modifiers.
+    const summary = [
+      b.reload ? `+${Math.round(b.reload * 100)}% reload` : null,
+      b.sail ? `+${Math.round(b.sail * 100)}% speed` : null,
+      b.cannon ? `+${Math.round(b.cannon * 100)}% cannon damage` : null,
+      b.luck ? `+${b.luck} luck` : null,
+    ].filter(Boolean).join(' · ');
+
     body.innerHTML = `
-      <div class="crew-list">
-        ${rows || '<p class="empty-note">No crew yet. Rescue survivors, free castaways, or hire hands in port taverns.</p>'}
+      <div class="crew-head">
+        <div>
+          <h4>Your Crew <span class="crew-count">${members.length}/${game.crew.capacity}</span></h4>
+          <p class="panel-note">${summary || 'An empty deck. Hire hands at any port tavern.'}</p>
+        </div>
       </div>
-      <p class="panel-note">Crew man the guns (faster reload), fight beside you in boardings — and can die there. Forever.</p>`;
-    body.querySelectorAll('.crew-face').forEach((c) => {
-      const m = game.crew.members.find((m) => m.id === c.dataset.id);
-      if (m) drawPirate(c.getContext('2d'), m.appearance);
+      <div class="crew-cards">
+        ${members.map((m, i) => this._crewCard(m, i)).join('')
+          || '<p class="empty-note">No crew yet. Rescue survivors, free castaways, or hire hands in port taverns.</p>'}
+      </div>
+      <p class="panel-note">Crew man the guns, fight beside you in boardings — and can die there. Forever.</p>`;
+
+    body.querySelectorAll('.crew-portrait').forEach((c) => {
+      const m = members[Number(c.dataset.i)];
+      if (!m) return;
+      c.getContext('2d').drawImage(
+        portraitCanvas(faceFromAppearance(m.appearance, hashId(m.id)), crewRole(m).mood), 0, 0,
+      );
     });
-    body.querySelectorAll('.dismiss-btn').forEach((b) => {
-      b.addEventListener('click', () => {
-        const m = game.crew.members.find((m) => m.id === b.dataset.id);
+    body.querySelectorAll('.crew-action').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const m = members[Number(btn.dataset.i)];
         if (m && confirm(`Put ${m.name} ashore for good?`)) {
-          game.crew.dismiss(b.dataset.id);
+          game.crew.dismiss(m.id);
           this.render();
         }
       });
     });
+  }
+
+  _crewCard(m, i) {
+    const role = crewRole(m);
+    const frac = m.health / m.maxHealth;
+    const traits = m.traits.map((t) =>
+      `<span class="trait-chip" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('');
+    return `<article class="crew-card">
+      <div class="crew-card-top">
+        <canvas class="crew-portrait" width="64" height="64" data-i="${i}"></canvas>
+        <div class="crew-ident">
+          <b>${m.name}</b>
+          <span class="crew-role">${role.icon} ${role.name}</span>
+          <span class="crew-lvl">Level ${m.level}</span>
+        </div>
+      </div>
+      <div class="crew-stats">
+        <div class="crew-stat"><span>Health</span><div class="crew-hpbar"><i style="width:${Math.round(frac * 100)}%"></i></div><b>${Math.round(m.health)}</b></div>
+        <div class="crew-stat"><span>Weapon</span><b class="crew-weapon">${ITEMS[m.weapon]?.name ?? 'Fists'}</b></div>
+      </div>
+      <div class="crew-traits">${traits}</div>
+      <button class="mini-btn crew-action ghost" data-i="${i}">Put ashore</button>
+    </article>`;
   }
 
   /* ---- ship tab ------------------------------------------------------------ */
@@ -368,8 +505,17 @@ export class InventoryUI {
     }).join('');
     const paints = PAINTS.filter((p) => st.paints.includes(p.id)).map((p) =>
       `<button class="mini-btn paint-btn ${st.paint === p.id ? 'active' : ''}" data-id="${p.id}">${p.name}</button>`).join('');
+    const ownedCount = st.ownedHulls.length;
     body.innerHTML = `
       <div class="ship-panel">
+        <div class="ship-ident">
+          <div>
+            <span class="ship-eyebrow">Your command</span>
+            <h4>${st.hullDef.name}</h4>
+            <p class="panel-note">${st.hullDef.tagline}</p>
+          </div>
+          <span class="ship-fleet">${ownedCount}/${HULL_ORDER.length} hulls owned</span>
+        </div>
         <div class="bar-row"><span>Hull</span><div class="bigbar"><div style="width:${hullFrac * 100}%;background:${hullFrac > 0.5 ? '#6fce62' : hullFrac > 0.25 ? '#e0b345' : '#e05a4a'}"></div></div><b>${Math.round(st.hull)}/${st.maxHull}</b></div>
         <div class="bar-row"><span>Sails</span><div class="bigbar"><div style="width:${sailFrac * 100}%;background:#bcd6f0"></div></div><b>${Math.round(st.sailHp)}/${st.maxSail}</b></div>
         <div class="ship-facts">
@@ -382,6 +528,7 @@ export class InventoryUI {
         ${upgrades}
         <h4>Paint</h4>
         <div class="paint-row">${paints}</div>
+        <p class="panel-note">Bigger hulls are bought at a port Shipyard. Upgrades move with you.</p>
       </div>`;
     body.querySelectorAll('.paint-btn').forEach((b) => {
       b.addEventListener('click', () => {

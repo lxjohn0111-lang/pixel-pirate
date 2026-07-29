@@ -24,6 +24,8 @@ export const STAT_LABELS = {
   questsDone: 'Contracts Completed',
   treasuresDug: 'Treasures Recovered',
   legendarySeen: 'Legendary Sightings',
+  bountiesClaimed: 'Bounties Claimed',
+  shipsBought: 'Ships Commissioned',
 };
 
 export class Stats {
@@ -64,6 +66,8 @@ export class Stats {
     ev.on('quest:completed', () => inc('questsDone'));
     ev.on('treasure:recovered', () => inc('treasuresDug'));
     ev.on('legend:sighted', () => inc('legendarySeen'));
+    ev.on('bounty:claimed', () => inc('bountiesClaimed'));
+    ev.on('ship:bought', () => inc('shipsBought'));
   }
 
   add(key, n = 1) {

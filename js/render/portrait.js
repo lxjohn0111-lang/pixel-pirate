@@ -7,7 +7,7 @@
 // people talking, not as a static bust beside a text dump.
 
 import { makeCanvas } from './sprites.js';
-import { shade } from './pirate.js';
+import { shade, SKIN_COLORS, HAIR_COLORS, PALETTE } from './pirate.js';
 
 export const P = 64; // portrait size in native pixels
 
@@ -380,4 +380,55 @@ export function portraitCanvas(face, expression = 'neutral') {
   const c = makeCanvas(P, P);
   drawPortrait(c.getContext('2d'), face, { expression });
   return c;
+}
+
+/* ------------------------------------------------------------------ */
+/* Appearance -> portrait face                                         */
+/* ------------------------------------------------------------------ */
+
+// Crew and bounty targets are generated as full-body pirates
+// (render/pirate.js) whose look is a bag of option indices. The portrait
+// renderer wants named parts and hex colors instead, so this translates
+// between the two — the same hand gets the same face every time, and a
+// crew card shows the person actually standing on your deck.
+
+const HAIR_BY_INDEX = ['bald', 'short', 'long', 'long', 'curly', 'dreads'];
+const BEARD_BY_INDEX = ['none', 'stubble', 'mustache', 'goatee', 'full', 'braided'];
+const HAT_BY_INDEX = ['bald', 'bandana', 'tricorne', 'captain', 'straw', 'tricorne'];
+const EYE_COLORS = ['#5a7a4a', '#3a5a7a', '#6a4a2a', '#4a4a52', '#2f6e6e'];
+
+/**
+ * Build a portrait face from a render/pirate.js appearance.
+ * `seed` only decorates details the body sprite has no opinion about
+ * (eye color, scar side), so faces stay varied but deterministic.
+ */
+export function faceFromAppearance(appearance, seed = 0, opts = {}) {
+  const a = appearance ?? {};
+  const s = seed >>> 0;
+  const hairColor = HAIR_COLORS[a.hairColor % HAIR_COLORS.length] ?? HAIR_COLORS[0];
+  const primary = PALETTE[a.primary % PALETTE.length] ?? PALETTE[0];
+  const secondary = PALETTE[a.secondary % PALETTE.length] ?? PALETTE[11];
+  // A hat in the body sprite wins; otherwise the head is bare and the
+  // hair carries the silhouette on its own.
+  const hat = HAT_BY_INDEX[a.hat % HAT_BY_INDEX.length] ?? 'bald';
+  return {
+    skin: SKIN_COLORS[a.skin % SKIN_COLORS.length] ?? SKIN_COLORS[1],
+    hair: HAIR_BY_INDEX[a.hair % HAIR_BY_INDEX.length] ?? 'short',
+    hairColor,
+    beard: BEARD_BY_INDEX[a.beard % BEARD_BY_INDEX.length] ?? 'none',
+    beardColor: shade(hairColor, 8),
+    hat,
+    hatColor: hat === 'straw' ? '#c9a35a' : primary,
+    hatTrim: secondary,
+    earring: (s >> 3) % 3 === 0 ? '#e0b345' : null,
+    eyeColor: EYE_COLORS[(s >> 5) % EYE_COLORS.length],
+    coat: primary,
+    collarTrim: secondary,
+    // scar and eyepatch are sides: -1 left, 1 right, 0/null for neither.
+    // The eyepatch already carries a hard-luck story, so no face gets both.
+    scar: a.eyepatch ? 0 : (s >> 7) % 5 === 0 ? 1 : 0,
+    eyepatch: a.eyepatch ? (a.eyepatch === 1 ? -1 : 1) : null,
+    bgTop: opts.bgTop ?? '#2a3a52',
+    bgBottom: opts.bgBottom ?? '#101c30',
+  };
 }

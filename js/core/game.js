@@ -50,6 +50,7 @@ import { Legends } from '../world/legends.js';
 import { Dungeon } from '../world/dungeons.js';
 import { Fishing } from '../systems/fishing.js';
 import { TreasureHunts } from '../systems/treasurehunt.js';
+import { Bounties } from '../world/bounties.js';
 import { Homestead } from '../world/homestead.js';
 import { LogUI } from '../ui/logUI.js';
 import { HomeUI } from '../ui/homeUI.js';
@@ -143,6 +144,7 @@ export class Game {
     this.dungeon = new Dungeon(this);
     this.fishing = this.registerSystem(new Fishing(this));
     this.treasureHunts = new TreasureHunts(this, save?.treasureHunts);
+    this.bounties = new Bounties(this, save?.bounties);
     if (this.prestige > 0) this.cosmetics.unlock('flag', 'legend');
 
     // First voyage: a captain needs the basics.
@@ -241,6 +243,11 @@ export class Game {
       || this.ads?.isOpen || this.dialogue?.isOpen;
   }
 
+  /** True while the ship is tied up at a quay and the world is on hold. */
+  get docked() {
+    return !!this.portUI?.isOpen;
+  }
+
   /** Where the equipped relic points (Golden Compass / Treasure Locator). */
   relicTarget() {
     const relic = this.inventory?.equipment?.relic;
@@ -305,6 +312,7 @@ export class Game {
   _syncPaint() {
     const tint = PAINTS.find((p) => p.id === this.shipState.paint)?.tint ?? null;
     if (tint !== this.ship.paintTint) this.ship.paintTint = tint;
+    this.ship.hullScale = this.shipState.hullDef.scale;
     const eq = this.cosmetics.equipped;
     const sail = SAILS[eq.sail];
     this.ship.sailStyle = sail && (sail.tint || sail.mark) ? { id: eq.sail, tint: sail.tint, mark: sail.mark } : null;
@@ -591,6 +599,18 @@ export class Game {
       return;
     }
 
+    // Docked: you are ashore. The helm is out of reach and so are you —
+    // no drifting off the quay while reading a bounty poster, and no
+    // raider putting a broadside through a ship nobody is steering.
+    // The sea keeps animating behind the port screen regardless.
+    if (this.docked) {
+      this.particles.update(dt);
+      this.audio.update(dt);
+      this.stats.data.timePlayed += dt;
+      this.input.endFrame();
+      return;
+    }
+
     this.dayNight.update(dt, this.events);
     this.weather.update(dt, this.events);
 
@@ -603,6 +623,7 @@ export class Game {
     this.encounters.update(dt);
     this.quests.update(dt);
     this.treasureHunts.update();
+    this.bounties.update(dt);
     this.story.update(dt);
     this.stats.update(dt);
     this.achievements.update(dt);
@@ -807,6 +828,7 @@ export class Game {
       homestead: this.homestead.serialize(),
       legends: this.legends.serialize(),
       treasureHunts: this.treasureHunts.serialize(),
+      bounties: this.bounties.serialize(),
       story: this.story.serialize(),
       mapData: {
         explored: [...this.mapData.explored],

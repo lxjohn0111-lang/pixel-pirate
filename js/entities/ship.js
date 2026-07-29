@@ -171,6 +171,10 @@ export class Ship {
       ? styledFlag(((t * 6) | 0) % 3, this.flagStyle.id, this.flagStyle.body, this.flagStyle.mark)
       : shipFlag(((t * 6) | 0) % 3);
 
+    // Bought hulls are bigger boats, not just bigger numbers — a galleon
+    // has to read as a galleon from across the water.
+    const hs = this.hullScale ?? 1;
+
     g.save();
     g.translate(Math.round(this.x), Math.round(this.y + this.bob));
 
@@ -179,11 +183,13 @@ export class Ship {
     g.rotate(this.heading);
     g.fillStyle = 'rgba(8,20,40,0.28)';
     g.beginPath();
-    g.ellipse(0, 4, SHIP.hullLength * 0.52, SHIP.hullWidth * 0.5, 0, 0, TAU);
+    g.ellipse(0, 4 * hs, SHIP.hullLength * 0.52 * hs, SHIP.hullWidth * 0.5 * hs, 0, 0, TAU);
     g.fill();
     g.restore();
 
     g.rotate(this.heading + this.roll);
+    g.save();
+    g.scale(hs, hs);
     g.drawImage(hull, -SHIP_W / 2, -SHIP_H / 2);
     // figurehead rides the bow
     if (this.figurehead && this.figurehead !== 'none') {
@@ -191,20 +197,22 @@ export class Ship {
     }
     g.drawImage(sail, -SHIP_W / 2, -SHIP_H / 2);
     g.drawImage(flag, -12, -3); // pennant streaming behind the mast
+    g.restore();
 
     // Stern lantern glow at night (color follows the fitted lantern).
     if (dayNight.snapshot.sun < 0.35) {
       const glow = (0.35 - dayNight.snapshot.sun) / 0.35;
       const lc = this.lanternColor ?? [255, 196, 90];
       g.fillStyle = `rgba(${lc[0]},${lc[1]},${lc[2]},${0.75 * glow})`;
-      g.fillRect(-22, -1, 2, 2);
+      g.fillRect(-22 * hs, -1, 2, 2);
     }
     g.restore();
 
     // The captain always stands upright on the stern deck (a person,
     // not part of the hull), at the helm position rotated into place.
-    const hx = this.x + Math.cos(this.heading) * -13;
-    const hy = this.y + Math.sin(this.heading) * -13 + this.bob;
+    // The helm moves aft with the hull, but the captain stays one size.
+    const hx = this.x + Math.cos(this.heading) * -13 * hs;
+    const hy = this.y + Math.sin(this.heading) * -13 * hs + this.bob;
     g.drawImage(this.captain, Math.round(hx - 4), Math.round(hy - 9));
 
     // The ship's pet keeps the captain company.

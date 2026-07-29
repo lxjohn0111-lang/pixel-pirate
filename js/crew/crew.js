@@ -164,3 +164,37 @@ export class CrewSystem {
     return this.members.map((m) => ({ ...m }));
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Roles: what a crew member is FOR                                    */
+/* ------------------------------------------------------------------ */
+
+// A crew member's traits already decide what they are good at; naming
+// that gives the card something to be about besides a level number.
+const ROLES = [
+  { trait: 'surgeon',    name: 'Surgeon',    icon: '✚', mood: 'warm' },
+  { trait: 'cook',       name: 'Cook',       icon: '🍲', mood: 'warm' },
+  { trait: 'navigator',  name: 'Navigator',  icon: '🧭', mood: 'neutral' },
+  { trait: 'eagleEye',   name: 'Gunner',     icon: '🎯', mood: 'grim' },
+  { trait: 'fastReload', name: 'Powder Monkey', icon: '💨', mood: 'grin' },
+  { trait: 'fearless',   name: 'Boarder',    icon: '⚔', mood: 'angry' },
+  { trait: 'strong',     name: 'Bruiser',    icon: '💪', mood: 'grim' },
+  { trait: 'lucky',      name: 'Lookout',    icon: '👁', mood: 'sly' },
+  { trait: 'greedy',     name: 'Quartermaster', icon: '💰', mood: 'sly' },
+  { trait: 'coward',     name: 'Swabbie',    icon: '🧹', mood: 'sad' },
+];
+
+export function crewRole(m) {
+  for (const r of ROLES) if (m.traits.includes(r.trait)) return r;
+  return { name: 'Deckhand', icon: '⚓', mood: 'neutral' };
+}
+
+/** Stable numeric seed from a crew id, for portrait detail variation. */
+export function hashId(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}

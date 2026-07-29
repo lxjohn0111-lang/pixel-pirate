@@ -205,6 +205,67 @@ Freezing the world to tell someone their hull is leaking is how a hint turns
 into an interruption. Barks are contextual and fire once each: low hull,
 first crew member, nightfall, heavy weather, rod in the hold, first leviathan.
 
+## Ports, ships and bounties
+
+**Docking stops the world.** Tying up at a quay sets `game.docked`, which
+freezes the ship, every AI ship, the day/night clock and all combat — the
+sea keeps animating, but nothing can drift, and nothing can shoot a ship
+nobody is steering. Because you cannot sail while ashore there is no
+reason to keep the water on screen, so the port takes the whole viewport
+and **⚓ Set Sail** sits in the header at all times.
+
+**The harbour square** is a hub of districts rather than a strip of tabs.
+Each one carries a live status line, so the square doubles as a dashboard:
+
+| District | What it holds |
+| -------- | ------------- |
+| Harbour Office | Careening, cargo sales, the deed to a private isle |
+| Shipyard | The ship shop — buy and switch hulls |
+| Shipwright | Upgrades and hull paint |
+| Bounty Board | Wanted captains |
+| The Tavern | Crew for hire, contracts, retirement into Legend |
+| Market Row | General store, weapons, black market |
+| Outfitter | Sails, flags, figureheads, lanterns |
+
+Dockhands stroll the quay along the bottom, and a procedural panorama of
+the town is drawn per port and lit by the current hour — docking at dusk
+looks like dusk.
+
+### The ship shop
+
+Six hulls, from the starting **Sloop** to the **Man-o-War**
+(`js/entities/ships.js`). Every hull is a base stat line; upgrade levels
+stack on top, so a fully fitted sloop is still a sloop and trading up is
+the only way past the ceiling. Upgrades move with you when you change
+hulls.
+
+Every hull is previewable, including locked ones — you can see exactly
+what you are working toward and what it will take. Locks are things you
+did, not just money: captain level, bounties claimed, a leviathan killed,
+a prestige run. The shipyard draws each hull to a shared scale so the
+list reads as a fleet, and puts its stats side by side against the ship
+you are currently sailing, with gains and losses marked. Bigger hulls are
+visibly bigger on the water, and buying one gets a full-screen moment
+rather than a toast.
+
+### Bounties
+
+Every port board posts three wanted captains as pinned posters — portrait,
+name, ship, skull rating, the crime, and the reward. Taking one starts a
+hunt (`js/world/bounties.js`), and the target is a real ship with a real
+position:
+
+- It **keeps sailing whether or not you are watching.** Far away it is
+  simulated; come within 780px and it materialises as a fightable ship,
+  carrying whatever damage it already took.
+- Your compass points at it and it shows on the world map as a moving
+  skull — the only mark on that chart that does not stay put.
+- **You can lose it.** The escape clock runs down, and another crew may
+  claim the name first. One contract at a time, so the arrow on the
+  compass always means exactly one thing.
+
+The clock only runs while you are at sea; time is stopped in port.
+
 ## Rewarded ads (CrazyGames SDK)
 
 Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/intro/)
@@ -261,11 +322,13 @@ js/
 │   ├── events.js        rumor-driven world events
 │   ├── legends.js       Kraken, Serpent, Duchess, wonders
 │   ├── dungeons.js      room-chain dungeon crawls (on the boarding engine)
+│   ├── bounties.js      wanted captains, roaming hunts
 │   ├── homestead.js     the captain's private isle
 │   ├── daynight.js      keyframed day/night color cycle
 │   └── weather.js       blended weather state machine
 ├── entities/
 │   ├── ship.js          player ship physics + drawing
+│   ├── ships.js         the hull catalogue (sloop → man-o-war)
 │   ├── shipstate.js     hull/sails/cannons/upgrades/paint
 │   ├── player.js        stats, XP, levels
 │   ├── aiship.js        merchant/pirate/navy AI ships
@@ -282,7 +345,7 @@ js/
 │   ├── story.js         six chapters, goals, markers, contextual barks
 │   ├── dialogue.js      the dialogue stage: beats, typing, choices, barks
 │   └── characters.js    the cast: faces and voices
-├── crew/crew.js         crew members, traits, bonuses
+├── crew/crew.js         crew members, traits, roles, bonuses
 ├── quests/quests.js     procedural contracts
 ├── meta/                long-term progression (Part 3)
 │   ├── stats.js         lifetime statistics (EventBus observers)

@@ -94,6 +94,8 @@ export class AIShip {
   }
 
   get label() {
+    // Named ships (bounty targets) announce themselves by name.
+    if (this.customLabel) return this.customLabel;
     return {
       fishing: 'Fishing Boat', civilian: 'Sloop', merchant: 'Merchant Ship',
       pirate: 'Pirate Raider', navy: 'Navy Patrol', ghost: 'Ghost Ship',

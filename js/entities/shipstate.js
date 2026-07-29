@@ -4,6 +4,7 @@
 // (speed, turning) back into the physics via getters the ship reads.
 
 import { clamp } from '../util/math.js';
+import { getHull, DEFAULT_HULL } from './ships.js';
 
 export const UPGRADES = {
   hull:    { name: 'Hull',          max: 5, cost: (l) => ({ gold: 120 * l, wood: 8 * l, iron: 2 * l }), desc: '+40 max hull per level' },
@@ -31,6 +32,12 @@ export class ShipState {
   constructor(game, saved) {
     this.game = game;
     this.levels = { hull: 0, cannons: 0, sails: 0, storage: 0, crew: 0, rudder: 0, ...(saved?.levels ?? {}) };
+    // The hull you own. Upgrades stack on top of its base stats, so a
+    // fully fitted sloop is still a sloop — trading up is the only way
+    // past the ceiling. Saves from before the shipyard land on the sloop,
+    // which is exactly the ship they were already sailing.
+    this.hullId = saved?.hullId ?? DEFAULT_HULL;
+    this.ownedHulls = saved?.ownedHulls ?? [DEFAULT_HULL];
     this.hull = saved?.hull ?? this.maxHull;
     this.sailHp = saved?.sailHp ?? this.maxSail;
     this.paint = saved?.paint ?? 'oak';
@@ -39,8 +46,20 @@ export class ShipState {
     this._sinceHit = 99;
   }
 
-  get maxHull() { return 100 + this.levels.hull * 40; }
+  get hullDef() { return getHull(this.hullId); }
+
+  get maxHull() { return this.hullDef.hull + this.levels.hull * 40; }
   get maxSail() { return 60 + this.levels.sails * 10; }
+
+  /** Switch hulls. The new ship comes out of the yard sound and ready. */
+  setHull(id) {
+    this.hullId = id;
+    if (!this.ownedHulls.includes(id)) this.ownedHulls.push(id);
+    this.hull = this.maxHull;
+    this.sailHp = this.maxSail;
+    this.game.inventory?.cargo?.resize(this.cargoSlots);
+    this.game.events.emit('ship:hullchanged', { id });
+  }
 
   /** Equipped legendary relic id (Part 3), or null. */
   get relic() {
@@ -48,12 +67,12 @@ export class ShipState {
   }
 
   get cannonsPerSide() {
-    return 2 + this.levels.cannons + (this.relic === 'ghostCannon' ? 1 : 0);
+    return this.hullDef.cannons + this.levels.cannons + (this.relic === 'ghostCannon' ? 1 : 0);
   }
 
   get cannonDamage() { return 15 + this.levels.cannons * 4; }
-  get cargoSlots() { return 12 + this.levels.storage * 6; }
-  get crewCapacity() { return 2 + this.levels.crew * 2; }
+  get cargoSlots() { return this.hullDef.cargo + this.levels.storage * 6; }
+  get crewCapacity() { return this.hullDef.crew + this.levels.crew * 2; }
 
   /** Multipliers the Part 1 ship physics reads. */
   get speedMult() {
@@ -64,10 +83,11 @@ export class ShipState {
     if (this.relic === 'stormLantern' && this.game.weather?.rain > 0.2) relicBonus += 0.15;
     const daily = this.game.daily?.modifier?.speed ?? 1;
     const prestige = 1 + (this.game.prestige ?? 0) * 0.02;
-    return (1 + this.levels.sails * 0.08 + crewBonus + relicBonus) * sailDamagePenalty * daily * prestige;
+    return this.hullDef.speed
+      * (1 + this.levels.sails * 0.08 + crewBonus + relicBonus) * sailDamagePenalty * daily * prestige;
   }
 
-  get turnMult() { return 1 + this.levels.rudder * 0.1; }
+  get turnMult() { return this.hullDef.turn * (1 + this.levels.rudder * 0.1); }
 
   get reloadTime() {
     const crewBonus = this.game.crew ? this.game.crew.bonuses().reload : 0;
@@ -108,6 +128,8 @@ export class ShipState {
   serialize() {
     return {
       levels: { ...this.levels },
+      hullId: this.hullId,
+      ownedHulls: [...this.ownedHulls],
       hull: Math.round(this.hull),
       sailHp: Math.round(this.sailHp),
       paint: this.paint,
