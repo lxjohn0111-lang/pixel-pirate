@@ -90,6 +90,24 @@ export const COLLECTION = {
     },
     reward: { kind: 'flag', id: 'horizon', label: 'Horizon Society Flag' },
   },
+  named: {
+    name: 'Great Ships',
+    entries: {
+      crimsonWidow: 'The Crimson Widow', seaGhost: 'Sea Ghost',
+      goldenFortune: 'Golden Fortune', ironLeviathan: 'Iron Leviathan',
+      blackTempest: 'Black Tempest',
+    },
+    reward: { kind: 'figurehead', id: 'leviathan', label: 'Leviathan Figurehead' },
+  },
+  clans: {
+    name: 'Clan Colours',
+    entries: {
+      crimson: 'The Crimson Tide', ashen: 'Ashen Company',
+      goldwake: 'The Goldwake Consortium', nightglass: 'Nightglass Covenant',
+      tideborn: 'The Tideborn', saltborn: 'Saltborn Free Company',
+    },
+    reward: { kind: 'flag', id: 'crew', label: 'Brotherhood Flag' },
+  },
 };
 
 export class Collection {

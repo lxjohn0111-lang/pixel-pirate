@@ -6,6 +6,8 @@
 import { mulberry32, hash2u, pick, rangeInt } from '../util/random.js';
 import { dockSprite, portHouseSprite } from '../render/sprites.js';
 import { dist2 } from '../util/math.js';
+import { CLANS } from './clans.js';
+import { clanBanner } from '../render/clanart.js';
 
 const PORT_PREFIX = ['Port', 'Cape', 'Bahía', 'Havre', 'Cove', 'Anchorage'];
 const PORT_NAMES = ['Meridian', 'Salt', 'Grouper', 'Widow', 'Ember', 'Corsair', 'Gull', 'Serpent',
@@ -105,6 +107,28 @@ export class Ports {
             g.drawImage(spr, h.x - 10, h.y - 16);
           },
         });
+      }
+
+      // Whoever holds the harbour flies their colours over it. This is
+      // the only readout of port control the player gets while at sea,
+      // so it goes on the quay itself rather than in a menu.
+      const owner = this.game.clans?.portOwner(port);
+      const clan = owner ? CLANS[owner] : null;
+      if (clan) {
+        const banner = clanBanner(clan, 14, 22);
+        for (let i = 0; i < 2; i++) {
+          const bx = Math.round(port.baseX + Math.cos(port.angle + Math.PI / 2) * (i ? 13 : -13));
+          const by = Math.round(port.baseY + Math.sin(port.angle + Math.PI / 2) * (i ? 13 : -13));
+          out.push({
+            y: by + 1,
+            draw: (g) => {
+              // mast
+              g.fillStyle = '#4d3420';
+              g.fillRect(bx, by - 30, 2, 30);
+              g.drawImage(banner, bx - 1, by - 30);
+            },
+          });
+        }
       }
     });
   }

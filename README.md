@@ -115,10 +115,10 @@ Then open <http://localhost:8000>.
 - **A living world** — ships sail with destinations, merchants form convoys,
   pirates raid shipping, the navy hunts raiders, and battles play out (and
   leave burning wrecks and floating cargo) whether or not you're there.
-- **Factions & reputation** — six factions (Brethren of the Coast, Royal
-  Navy, Merchant Guild, Night Runners, Horizon Society, the Sunken Kingdom)
-  react to everything you sink, save and serve: prices shift, patrols turn
-  hostile, raiders let kindred spirits pass.
+- **Factions & reputation** — standing that reacts to everything you sink,
+  save and serve: prices shift, patrols turn hostile, raiders let kindred
+  spirits pass. *(Superseded by Pirate Clans, below — the clan system took
+  over this API, so everything built on it kept working.)*
 - **World events** — rumor toasts point to merchant convoys, pirate
   ambushes, sea battles, treasure fleets, burning ships, naval blockades,
   haunted fog (with something inside), great storms and treasure rumors.
@@ -266,6 +266,111 @@ position:
 
 The clock only runs while you are at sea; time is stopped in port.
 
+## Pirate Clans
+
+Clans are the spine everything else hangs off. Six of them hold the sea
+between them (`js/world/clans.js`), and they took over the old faction
+standing system rather than sitting beside it — the API other systems
+already called is preserved exactly, so shops, spawners and quests kept
+working while the meaning underneath became *which clan is this*.
+
+| Clan | Leader | Home waters | Temperament |
+| ---- | ------ | ----------- | ----------- |
+| The Crimson Tide | Admiral Rosa Sanguine | The Bleeding Shoals | Aggressive |
+| Ashen Company | Commodore Iyare Okonkwo | Greyharbour Reach | Disciplined |
+| The Goldwake Consortium | Factor Mireille Vasque | The Bullion Run | Mercantile |
+| Nightglass Covenant | The Whisper | The Drowned Lanterns | Secretive |
+| The Tideborn | Mother Kelune | The Sunken Choir | Zealous |
+| Saltborn Free Company | Captain Bram Halloway | The Open Reach | Independent |
+
+**You can tell at a glance.** Every NPC ship belongs to a clan and shows
+it three ways: a clan-coloured name plate with the clan's emblem above
+the hull, and a clan-coloured pennant flying from the stern. Emblems,
+flags, banners and badges are all drawn procedurally from one 16×16 glyph
+vocabulary (`js/render/clanart.js`), so a clan looks like itself whether
+you are reading a menu or squinting at a sail.
+
+**Territory** is a coarse grid radiating from each clan's home waters,
+resolved lazily and then remembered — the political map only materialises
+where someone has actually sailed. Strong clans push their borders out.
+
+**They fight without you.** Wars grind both sides' strength down, the
+winner takes harbours off the loser, exhausted wars end, and new quarrels
+and accords form on their own clock. Ships whose clans are at war go for
+each other on sight regardless of what they are carrying. The Clans tab
+carries a running log of it: *"Goldwake takes Cape Ivory from Nightglass."*
+
+### Reputation
+
+Standing runs −100 to +100 per clan and moves on what you actually do:
+sinking their ships, rescuing their people, finishing their contracts,
+poaching their crew, killing their flagship. Helping one clan quietly
+endears you to everyone at war with them, so you drift into somebody's
+orbit without ever picking a side outright.
+
+| Standing | What it opens |
+| -------- | ------------- |
+| −60 | Their fleets hunt you on sight |
+| −25 | Their ships turn hostile nearby |
+| +20 | Ordinary prices in their ports |
+| +40 | Discounts where they hold the harbour |
+| +55 | Their crews will take your coin |
+| +70 | Exclusive contracts |
+| +90 | Rare hulls from their private slips |
+
+**Ports answer to clans.** Banners fly over the quay in the holder's
+colours, the port header names them, and their standing with you is what
+actually moves the prices. Ownership changes as wars are won and lost.
+
+### Your own clan
+
+At an average standing of +35 any harbourmaster will enter you in the
+register. You pick a name, a colour and an emblem with a live preview of
+the badge and banner, and from then on your colours fly from your own
+mast and every hand you take sails under them.
+
+### Recruitment
+
+Five routes in, deliberately different in feel rather than five buttons
+that all mean *pay*: coin at a tavern, winning a boarding, beating a
+bounty captain, pulling someone out of the water, or doing a clan's work.
+All of them run the same check, so someone out of reach is out of reach
+whichever door you knock on — what changes is how much pull the route
+brings. A captain will never be bought, but they might follow the person
+who just beat them.
+
+Crew carry a **rank** (Deckhand → Captain), their **original clan** and a
+**loyalty** score, all on the card. A deck poached from four clans reads
+very differently from six Saltborn who signed on together.
+
+### Named ships
+
+Five hulls everyone has heard of, each tied to a clan and patrolling its
+home waters — the **Crimson Widow**, **Sea Ghost**, **Golden Fortune**,
+**Iron Leviathan** and **Black Tempest**. They are found, not thrown at
+you: sail into the right stretch of sea and one appears, visibly larger,
+several times tougher, with its own captain and backstory. Each drops a
+relic nobody else carries. Sink one and it stays sunk — there are five in
+the world, ever, and killing a clan's flagship costs you 25 standing with
+them and delights everyone they are at war with.
+
+### Ship customization
+
+Nine categories with a live preview of your actual ship: hull paint,
+sails, **sail patterns**, flags, figureheads, **cannons**, **cannon
+effects**, lanterns and **deck fittings**. Everything is a look, not a
+stat. The fitted guns show at the gun ports, the deck lanterns swing in
+the rigging, and the cannon effect tints your muzzle smoke.
+
+### Treasure maps
+
+Expeditions now hand you an actual chart (`js/render/chart.js`): burnt
+parchment with wobbling coastlines somebody drew from memory, a dashed
+trail, the legs you have already walked struck through, and an X on the
+last one. The margin notes whose water you are heading into — the only
+hard intelligence on an otherwise unreliable document. Hoards can hold
+clan relics, ship parts and cosmetics as well as gold.
+
 ## Rewarded ads (CrazyGames SDK)
 
 Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/intro/)
@@ -322,6 +427,8 @@ js/
 │   ├── events.js        rumor-driven world events
 │   ├── legends.js       Kraken, Serpent, Duchess, wonders
 │   ├── dungeons.js      room-chain dungeon crawls (on the boarding engine)
+│   ├── clans.js         the six clans: standing, territory, wars, ports
+│   ├── namedships.js    the five great ships and their captains
 │   ├── bounties.js      wanted captains, roaming hunts
 │   ├── homestead.js     the captain's private isle
 │   ├── daynight.js      keyframed day/night color cycle
@@ -345,7 +452,9 @@ js/
 │   ├── story.js         six chapters, goals, markers, contextual barks
 │   ├── dialogue.js      the dialogue stage: beats, typing, choices, barks
 │   └── characters.js    the cast: faces and voices
-├── crew/crew.js         crew members, traits, roles, bonuses
+├── crew/
+│   ├── crew.js          crew members, traits, roles, ranks, bonuses
+│   └── recruitment.js   the five ways a pirate joins your clan
 ├── quests/quests.js     procedural contracts
 ├── meta/                long-term progression (Part 3)
 │   ├── stats.js         lifetime statistics (EventBus observers)
@@ -362,6 +471,9 @@ js/
 │   ├── sprites.js       procedural sprite factory
 │   ├── pirate.js        layered captain sprite + appearance options
 │   ├── portrait.js      64×64 expressive character portraits
+│   ├── clanart.js       clan emblems, flags, banners and badges
+│   ├── shipdecor.js     sail patterns and deck fittings
+│   ├── chart.js         the hand-drawn treasure chart
 │   ├── decor.js         swaying island decorations
 │   └── particles.js     particles + floating text
 ├── audio/audio.js       WebAudio soundscape + generative music

@@ -5,7 +5,8 @@
 import { COLLECTION } from '../meta/collection.js';
 import { ACHIEVEMENTS } from '../meta/achievements.js';
 import { STAT_LABELS } from '../meta/stats.js';
-import { FACTIONS } from '../world/factions.js';
+import { CLANS, CLAN_IDS, REP_PERKS } from '../world/clans.js';
+import { clanBadge, clanEmblem } from '../render/clanart.js';
 import { MODIFIERS } from '../meta/daily.js';
 import { SAILS, FLAGS, FIGUREHEADS, LANTERNS } from '../meta/cosmetics.js';
 
@@ -13,6 +14,7 @@ export class LogUI {
   constructor(uiRoot, game) {
     this.game = game;
     this.tab = 'collection';
+    this.clanFocus = null; // clan id whose profile is open
     this.el = document.createElement('div');
     this.el.className = 'panel captain-panel hidden';
     uiRoot.appendChild(this.el);
@@ -27,6 +29,9 @@ export class LogUI {
   }
 
   open(tab = this.tab) {
+    // Leaving the Clans tab drops the open profile, so coming back lands
+    // on the list rather than wherever you happened to stop reading.
+    if (tab !== 'clans') this.clanFocus = null;
     this.tab = tab;
     this.el.classList.remove('hidden');
     this.game.events.emit('sfx', 'ui');
@@ -44,7 +49,7 @@ export class LogUI {
       ['collection', `Collection ${game.collection.completionPercent}%`],
       ['achievements', 'Achievements'],
       ['stats', 'Statistics'],
-      ['factions', 'Factions'],
+      ['clans', 'Clans'],
       ['daily', 'Daily'],
       ['locker', 'Locker'],
     ];
@@ -59,7 +64,10 @@ export class LogUI {
     this.el.querySelector('.close-btn').addEventListener('click', () => this.close());
     this.el.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => this.open(b.dataset.tab)));
     const body = this.el.querySelector('.panel-body');
-    this[`_${this.tab}`](body);
+    // Fall back rather than throw: an unknown tab name (a renamed tab, a
+    // stale deep link) should land somewhere useful, not break the panel.
+    const draw = this[`_${this.tab}`] ?? this._collection;
+    draw.call(this, body);
   }
 
   _collection(body) {
@@ -112,18 +120,125 @@ export class LogUI {
       `<div class="stat-row"><span>${label}</span><b>${fmt(k, stats.get(k))}</b></div>`).join('')}${extra}</div>`;
   }
 
-  _factions(body) {
-    const { factions } = this.game;
-    body.innerHTML = Object.entries(FACTIONS).map(([id, f]) => {
-      const rep = factions.rep[id];
+  /* ---- clans ------------------------------------------------------ */
+
+  _clans(body) {
+    const { clans } = this.game;
+    if (this.clanFocus) {
+      this._clanProfile(body, this.clanFocus);
+      return;
+    }
+    const mine = clans.playerClan;
+    const rows = CLAN_IDS.map((id) => {
+      const c = CLANS[id];
+      const rep = clans.rep[id];
       const pct = ((rep + 100) / 200) * 100;
-      return `<div class="fact-row">
-        <div class="fact-head"><span style="color:${f.color}">${f.name}</span>
-        <b style="color:${f.color}">${factions.label(id)} (${rep > 0 ? '+' : ''}${rep})</b></div>
-        <div class="fact-bar"><div style="width:${pct}%;background:${f.color}"></div><i></i></div>
-        <div class="fact-desc">${f.desc}</div>
+      const wars = clans.warsOf(id);
+      const allies = clans.alliesOf(id);
+      return `<button class="clan-row" data-clan="${id}" style="--clan:${c.color}">
+        <canvas class="clan-badge" width="44" height="44" data-clan="${id}"></canvas>
+        <div class="clan-main">
+          <div class="clan-title">
+            <b>${c.name}</b>
+            <span class="clan-standing">${clans.label(id)} (${rep > 0 ? '+' : ''}${rep})</span>
+          </div>
+          <div class="clan-sub">${c.leader} · ${c.home} · ${c.personality}</div>
+          <div class="clan-bar"><i style="width:${pct}%"></i><em></em></div>
+          <div class="clan-facts">
+            <span title="Fleet strength">Str <b>${clans.strength[id]}</b></span>
+            <span title="Hulls they can put to sea">Fleet <b>${clans.fleetSize(id)}</b></span>
+            <span title="Harbours held">Ports <b>${clans.portCount(id)}</b></span>
+            ${wars.length ? `<span class="clan-war">At war: ${wars.map((w) => CLANS[w].short).join(', ')}</span>` : ''}
+            ${allies.length ? `<span class="clan-ally">Allied: ${allies.map((a) => CLANS[a].short).join(', ')}</span>` : ''}
+          </div>
+        </div>
+        <span class="clan-go">›</span>
+      </button>`;
+    }).join('');
+
+    body.innerHTML = `
+      ${mine ? `<div class="my-clan" style="--clan:${mine.color}">
+          <canvas class="clan-badge" width="44" height="44" data-mine="1"></canvas>
+          <div><span class="clan-eyebrow">Your clan</span><b>${mine.name}</b>
+          <i>${mine.members?.length ?? 0} sworn · founded day ${mine.founded}</i></div>
+        </div>`
+        : `<div class="found-teaser">
+            <b>Found your own clan</b>
+            <p class="panel-note">Reach an average standing of +35 across the six clans and any
+            harbourmaster will register your colours. Currently ${clans.globalRep >= 0 ? '+' : ''}${clans.globalRep}.</p>
+            <div class="clan-bar wide"><i style="width:${Math.max(0, Math.min(100, ((clans.globalRep + 100) / 135) * 100))}%"></i></div>
+          </div>`}
+      <div class="clan-list">${rows}</div>
+      ${clans.log.length ? `<h4>Word from the sea lanes</h4>
+        <div class="clan-log">${clans.log.slice(0, 8).map((l) =>
+          `<div class="clan-log-row"><span>Day ${l.day}</span>${l.text}</div>`).join('')}</div>` : ''}`;
+
+    body.querySelectorAll('canvas.clan-badge').forEach((c) => {
+      const clan = c.dataset.mine ? clans.playerClan : CLANS[c.dataset.clan];
+      if (clan) c.getContext('2d').drawImage(clanBadge(clan, 44), 0, 0);
+    });
+    body.querySelectorAll('.clan-row').forEach((b) => b.addEventListener('click', () => {
+      this.clanFocus = b.dataset.clan;
+      this.game.events.emit('sfx', 'ui');
+      this.render();
+    }));
+  }
+
+  _clanProfile(body, id) {
+    const { clans } = this.game;
+    const c = CLANS[id];
+    const rep = clans.rep[id];
+    const wars = clans.warsOf(id);
+    const allies = clans.alliesOf(id);
+    const perks = REP_PERKS.map((p) => {
+      const has = p.bad ? rep <= p.at : rep >= p.at;
+      return `<li class="${has ? (p.bad ? 'perk-bad' : 'perk-on') : 'perk-off'}">
+        <span>${p.bad ? '!' : has ? '✓' : '·'}</span>
+        ${p.text}<i>${p.bad ? 'at' : 'needs'} ${p.at > 0 ? '+' : ''}${p.at}</i></li>`;
+    }).join('');
+
+    body.innerHTML = `
+      <button class="clan-back">‹ All clans</button>
+      <div class="clan-profile" style="--clan:${c.color}">
+        <header class="cp-head">
+          <canvas class="cp-badge" width="72" height="72"></canvas>
+          <div>
+            <h3>${c.name}</h3>
+            <p class="cp-motto">“${c.motto}”</p>
+            <p class="cp-standing">${clans.label(id)} <span>(${rep > 0 ? '+' : ''}${rep})</span></p>
+          </div>
+        </header>
+        <div class="cp-grid">
+          <div><span>Leader</span><b>${c.leader}</b><i>${c.leaderTitle}</i></div>
+          <div><span>Home waters</span><b>${c.home}</b></div>
+          <div><span>Temperament</span><b>${c.personality}</b></div>
+          <div><span>Fleet strength</span><b>${clans.strength[id]}</b></div>
+          <div><span>Hulls at sea</span><b>${clans.fleetSize(id)}</b></div>
+          <div><span>Harbours held</span><b>${clans.portCount(id)}</b></div>
+        </div>
+        <p class="cp-desc">${c.playstyle}</p>
+        <div class="cp-cols">
+          <div>
+            <h4>Wars</h4>
+            ${wars.length ? wars.map((w) => `<div class="cp-rel war" style="--o:${CLANS[w].color}">${CLANS[w].name}</div>`).join('')
+              : '<p class="panel-note">At peace with everyone.</p>'}
+          </div>
+          <div>
+            <h4>Allies</h4>
+            ${allies.length ? allies.map((a) => `<div class="cp-rel ally" style="--o:${CLANS[a].color}">${CLANS[a].name}</div>`).join('')
+              : '<p class="panel-note">No standing accords.</p>'}
+          </div>
+        </div>
+        <h4>What standing buys you</h4>
+        <ul class="cp-perks">${perks}</ul>
       </div>`;
-    }).join('') + '<p class="panel-note">Standing shifts with your deeds: who you sink, who you save, who you serve.</p>';
+
+    body.querySelector('.cp-badge').getContext('2d').drawImage(clanBadge(c, 72), 0, 0);
+    body.querySelector('.clan-back').addEventListener('click', () => {
+      this.clanFocus = null;
+      this.game.events.emit('sfx', 'ui');
+      this.render();
+    });
   }
 
   _daily(body) {

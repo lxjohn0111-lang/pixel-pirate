@@ -6,6 +6,7 @@
 
 import { TAU, clamp, angleDiff, dist2 } from '../util/math.js';
 import { AIShip } from '../entities/aiship.js';
+import { CLANS, CLAN_IDS } from '../world/clans.js';
 import { rollLoot, bestRarity, RARITY } from '../items/itemdefs.js';
 import { mulberry32 } from '../util/random.js';
 import { chestSprite, crateSprite } from '../render/sprites.js';
@@ -220,7 +221,7 @@ export class ShipCombat {
       }
       aim += (Math.random() - 0.5) * 0.06;
       this._spawnBall('player', sx, sy, aim, range, dmg);
-      game.particles.spawnSmoke(sx, sy, true);
+      game.particles.spawnSmoke(sx, sy, true, this.playerMuzzleTint());
     }
     game.camera.addShake(1.6);
     game.events.emit('sfx', 'cannon');
@@ -297,28 +298,64 @@ export class ShipCombat {
     if (i >= 0) this.ships.splice(i, 1);
   }
 
+  /** The fitted cannon effect, as an "r,g,b" string for the particles. */
+  playerMuzzleTint() {
+    const fx = this.game.cosmeticsDefs?.CANNON_FX?.[this.game.cosmetics?.equipped?.cannonfx];
+    return fx?.color ? fx.color.join(',') : null;
+  }
+
   _spawn(type) {
-    const { ship, world, factions } = this.game;
+    const { ship, world, clans } = this.game;
     const a = Math.random() * TAU;
     const d = SPAWN_RADIUS + Math.random() * 220;
     const x = ship.x + Math.cos(a) * d;
     const y = ship.y + Math.sin(a) * d;
     if (!world.isOpenWater(x, y)) return null;
     const s = new AIShip(type, x, y, this.game.tierAt(x, y));
-    // Faction standing shapes first impressions.
-    if (type === 'navy' && factions?.isHostile('navy')) s.hostileToPlayer = true;
-    if (type === 'merchant' && factions?.isHostile('merchants')) s.fleeing = true;
-    if (type === 'pirate' && factions?.isFriendly('pirates')) s.hostileToPlayer = false;
+    this.assignClan(s, x, y);
     this.ships.push(s);
     // Merchants sometimes sail as convoys with a sloop in trail.
     if (type === 'merchant' && Math.random() < 0.35 && this.ships.length < 9) {
       const escort = new AIShip('civilian', x - 60, y + 20, this.game.tierAt(x, y));
       escort.convoyLeader = s;
       escort.convoyOffset = (Math.random() - 0.5) * 60;
+      // An escort flies its charge's colours.
+      escort.clanId = s.clanId;
+      escort.hostileToPlayer = s.hostileToPlayer;
       this.ships.push(escort);
       this.game.collection?.discover('ships', 'convoy');
     }
     return s;
+  }
+
+  /**
+   * Give a ship its colours. Whoever holds these waters usually owns the
+   * hull sailing through them, but a clan whose ship types do not match
+   * yields to one whose do — a Tideborn ghost ship in Goldwake waters
+   * still reads as Tideborn, which is what makes borders feel porous.
+   */
+  assignClan(s, x, y) {
+    const { clans } = this.game;
+    if (!clans) return;
+    const local = clans.ownerOfRegion(x, y);
+    let owner = local;
+    if (!CLANS[local]?.shipTypes.includes(s.type)) {
+      const fits = CLAN_IDS.filter((id) => CLANS[id].shipTypes.includes(s.type));
+      // Prefer a clan that actually sails this kind of hull; fall back to
+      // the local power so every ship still belongs to somebody.
+      if (fits.length && Math.random() < 0.75) {
+        fits.sort((a, b) => clans.strength[b] - clans.strength[a]);
+        owner = fits[(Math.random() * Math.min(2, fits.length)) | 0];
+      }
+    }
+    s.clanId = owner;
+    // Standing decides the greeting. A clan that hunts you needs no
+    // provocation; one that is sworn to you will not raise a gun.
+    if (clans.isHunting(owner)) s.hostileToPlayer = s.cannons > 0;
+    else if (clans.isHostile(owner)) s.hostileToPlayer = s.cannons > 0 && Math.random() < 0.7;
+    else if (clans.isFriendly(owner)) s.hostileToPlayer = false;
+    if (clans.isHostile(owner) && s.cannons === 0) s.fleeing = true;
+    this.game.collection?.discover?.('clans', owner);
   }
 
   /* ---- drawing (hooked into the renderer's layers) -------------------- */

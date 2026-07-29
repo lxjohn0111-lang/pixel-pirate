@@ -245,8 +245,9 @@ export class Encounters {
       }
       case 'survivor': {
         consume();
-        game.events.emit('survivor:rescued', { x: e.x, y: e.y });
-        const member = createCrewMember(e.seed, 1 + Math.floor(game.tierAt(e.x, e.y) / 2));
+        const clanId = game.clans?.ownerOfRegion(e.x, e.y) ?? null;
+        game.events.emit('survivor:rescued', { x: e.x, y: e.y, clanId });
+        const member = createCrewMember(e.seed, 1 + Math.floor(game.tierAt(e.x, e.y) / 2), clanId);
         game.offerRecruit(member, 'You pulled a grateful sailor from the sea!');
         game.player.addXp(12);
         break;

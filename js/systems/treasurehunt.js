@@ -7,6 +7,8 @@
 import { TAU, dist2 } from '../util/math.js';
 import { mulberry32, pick, range } from '../util/random.js';
 import { rollLoot, ITEMS } from '../items/itemdefs.js';
+import { CLANS } from '../world/clans.js';
+import { drawTreasureChart } from '../render/chart.js';
 
 const CLUES = {
   island: [
@@ -27,6 +29,9 @@ const CLUES = {
 };
 
 const BIOMES = ['sand', 'palm', 'rock', 'jungle', 'coral'];
+
+/** Relics that only ever come out of a buried hoard. */
+const CLAN_RELICS = ['widowsLocket', 'ghostlight', 'fortuneChain', 'leviathanPlate', 'tempestCore'];
 
 let nextHuntId = 1;
 
@@ -69,7 +74,7 @@ export class TreasureHunts {
     const hunt = { id: `h${nextHuntId++}`, stage: 0, stages };
     this.hunts.push(hunt);
     game.hud.toast('An expedition begins! The first clue is marked on your chart.', '#f0a83c');
-    game.showMessage('The Weathered Chart', `"${stages[0].clue}"`, 'A search area is marked on your sea chart (M).');
+    this.showChart(hunt, 'The Weathered Chart');
     game.events.emit('sfx', 'quest');
     return true;
   }
@@ -86,7 +91,7 @@ export class TreasureHunts {
         h.stage++;
         const next = h.stages[h.stage];
         game.hud.toast('Clue found! The chart shows the next leg.', '#6fce62');
-        game.showMessage('The Trail Continues', `"${next.clue}"`, 'A new search area is marked on your sea chart.');
+        this.showChart(h, 'The Trail Continues');
         game.player.addXp(20);
         game.events.emit('sfx', 'quest');
       } else {
@@ -105,6 +110,15 @@ export class TreasureHunts {
         if (rng() < 0.4) {
           loot.items.push({ id: pick(rng, ['goldenCompass', 'treasureLocator', 'kingsHat', 'stormLantern']), qty: 1 });
         }
+        // Whoever's waters these are buried something of their own here.
+        const owner = game.clans?.ownerOfRegion(x, y);
+        if (owner && rng() < 0.5) {
+          loot.items.push({ id: pick(rng, CLAN_RELICS), qty: 1 });
+          game.hud.toast(`${CLANS[owner].name} lost something in these waters.`, CLANS[owner].color);
+        }
+        // Cosmetics and ship parts make the hoard worth opening even when
+        // the gold is unremarkable.
+        if (rng() < 0.35) loot.items.push({ id: pick(rng, ['cannonBarrel', 'silkSails', 'hullPlanks']), qty: 1 });
         game.combat.drops.push({ x, y, kind: 'chest', age: 0, loot });
         game.hud.toast('THE HOARD! It floats free of the depths — claim it!', '#f0a83c');
         game.player.addXp(80);
@@ -112,6 +126,25 @@ export class TreasureHunts {
         game.events.emit('sfx', 'victory');
       }
     }
+  }
+
+  /**
+   * Show the hunt as an actual chart: hand-drawn coastlines, a dashed
+   * trail with the legs already walked crossed off, and the clue written
+   * along the bottom in the same ink. Reading a riddle off a piece of
+   * parchment is most of what treasure hunting is.
+   */
+  showChart(hunt, title) {
+    const { game } = this;
+    const st = hunt.stages[hunt.stage];
+    const c = drawTreasureChart(hunt, game);
+    game.showMessage(
+      title,
+      `<img class="chart-img" alt="A weathered chart" src="${c.toDataURL()}">
+       <p class="chart-clue">“${st.clue}”</p>`,
+      `Leg ${hunt.stage + 1} of ${hunt.stages.length} · the search area is marked on your sea chart (M).`,
+    );
+    game.events.emit('sfx', 'quest');
   }
 
   /** Current search areas, for the map screen. */

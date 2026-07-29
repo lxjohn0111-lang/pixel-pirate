@@ -110,6 +110,13 @@ export const ITEMS = {
   serpentScale: { name: 'Serpent Scale',  type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1300, stats: { defense: 6, speed: 2 }, desc: 'Still warm. Still watching.' },
   coralHeart:   { name: 'Living Coral Heart', type: 'trinket', slot: 'relic', rarity: 'legendary', value: 1400, stats: { maxHealth: 20 }, effect: 'regen', desc: 'It beats in time with the tide, and so do you.' },
 
+  /* -- clan relics: taken from named ships, one per great captain ------- */
+  widowsLocket: { name: "The Widow's Locket", type: 'trinket', slot: 'necklace', rarity: 'mythic', value: 2200, stats: { attack: 10, critChance: 8 }, desc: 'Still holds a portrait. Nobody living knows of whom.' },
+  ghostlight:   { name: 'Ghostlight', type: 'trinket', slot: 'relic', rarity: 'mythic', value: 2300, stats: { luck: 5 }, effect: 'stormLantern', desc: 'A lamp that burns with no oil and casts no shadow.' },
+  fortuneChain: { name: 'Chain of Fortune', type: 'trinket', slot: 'necklace', rarity: 'mythic', value: 2600, stats: { luck: 12, defense: 4 }, desc: 'Every link was a debt somebody else paid.' },
+  leviathanPlate: { name: 'Leviathan Plate', type: 'armor', slot: 'coat', rarity: 'mythic', value: 2800, stats: { defense: 22, maxHealth: 40 }, desc: 'Hull plating from a ship that ate other ships.' },
+  tempestCore:  { name: 'Heart of the Tempest', type: 'trinket', slot: 'relic', rarity: 'mythic', value: 3000, stats: { speed: 4 }, effect: 'phoenixSail', desc: 'The storm never ended. It was only bottled.' },
+
   /* -- fishing ------------------------------------------------------------- */
   fishingRod:  { name: 'Fishing Rod', type: 'special', rarity: 'common', value: 10, desc: 'Stop the ship and press R to cast.' },
   sardine:     { name: 'Sardine', type: 'fish', rarity: 'common', stack: 20, value: 3, heal: 8, desc: 'Small, silver, everywhere.' },

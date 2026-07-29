@@ -6,6 +6,7 @@ import { SHIP } from '../core/constants.js';
 import { clamp, damp, lerp, angleDiff, TAU } from '../util/math.js';
 import { shipHull, shipSail, shipSailFurled, shipFlag, styledFlag, figureheadSprite, SHIP_W, SHIP_H } from '../render/sprites.js';
 import { buildMiniCaptain } from '../render/pirate.js';
+import { drawSailPattern, drawDeckDecor } from '../render/shipdecor.js';
 
 export class Ship {
   constructor(state, appearance) {
@@ -29,8 +30,11 @@ export class Ship {
 
   /** Sail sprite, tinted & marked by the equipped sail cosmetic. */
   _styledSail(base, key) {
-    if (!this.sailStyle || (!this.sailStyle.tint && !this.sailStyle.mark)) return base;
-    const cacheKey = `${key}:${this.sailStyle.id}`;
+    const pat = this.sailPattern;
+    if (!this.sailStyle || (!this.sailStyle.tint && !this.sailStyle.mark)) {
+      return pat && pat.pattern ? this._patternedSail(base, key) : base;
+    }
+    const cacheKey = `${key}:${this.sailStyle.id}:${pat?.id ?? 'none'}`;
     if (this._sailCache?.key !== cacheKey) {
       const c = document.createElement('canvas');
       c.width = base.width;
@@ -47,9 +51,27 @@ export class Ship {
         g.fillRect(28, 12, 4, 4); // emblem on the canvas
         g.fillRect(29, 11, 2, 6);
       }
+      if (pat && pat.pattern) drawSailPattern(g, c.width, c.height, pat);
       this._sailCache = { key: cacheKey, canvas: c };
     }
     return this._sailCache.canvas;
+  }
+
+  /** A pattern with no tint underneath it — the common case. */
+  _patternedSail(base, key) {
+    const pat = this.sailPattern;
+    const cacheKey = `pat:${key}:${pat.id}:${pat.mark ?? ''}`;
+    if (this._patCache?.key !== cacheKey) {
+      const c = document.createElement('canvas');
+      c.width = base.width;
+      c.height = base.height;
+      const g = c.getContext('2d');
+      g.drawImage(base, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      drawSailPattern(g, c.width, c.height, pat);
+      this._patCache = { key: cacheKey, canvas: c };
+    }
+    return this._patCache.canvas;
   }
 
   /** Hull sprite, tinted by the active paint job (Part 2 cosmetics). */
@@ -197,6 +219,15 @@ export class Ship {
     }
     g.drawImage(sail, -SHIP_W / 2, -SHIP_H / 2);
     g.drawImage(flag, -12, -3); // pennant streaming behind the mast
+    // Gun barrels poking from the ports, in whatever metal is fitted.
+    if (this.cannonColor) {
+      g.fillStyle = this.cannonColor;
+      for (let i = -1; i <= 1; i++) {
+        g.fillRect(i * 7 - 1, -SHIP_H / 2 - 1, 2, 3);
+        g.fillRect(i * 7 - 1, SHIP_H / 2 - 2, 2, 3);
+      }
+    }
+    drawDeckDecor(g, this.decorId, t);
     g.restore();
 
     // Stern lantern glow at night (color follows the fitted lantern).

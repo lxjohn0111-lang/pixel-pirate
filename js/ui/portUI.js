@@ -12,12 +12,15 @@
 import { ITEMS, RARITY, itemIcon } from '../items/itemdefs.js';
 import { UPGRADES, PAINTS } from '../entities/shipstate.js';
 import { HULLS, HULL_ORDER, HULL_STATS, hullUnlocked } from '../entities/ships.js';
-import { createCrewMember, TRAITS, crewRole, hashId } from '../crew/crew.js';
+import { createCrewMember, TRAITS, crewRole, hashId, RANKS } from '../crew/crew.js';
 import { mulberry32, rangeInt } from '../util/random.js';
 import { drawPirate } from '../render/pirate.js';
 import { portraitCanvas, faceFromAppearance } from '../render/portrait.js';
+import { crewCardHTML, paintCrewPortraits } from './crewcard.js';
 import { MAX_ACTIVE } from '../quests/quests.js';
 import { makeCanvas } from '../render/sprites.js';
+import { CLANS, CLAN_IDS } from '../world/clans.js';
+import { clanBadge, clanEmblem, clanBanner } from '../render/clanart.js';
 
 const SHOPS = {
   general:  { name: 'General Store', pool: ['wood', 'stone', 'iron', 'cloth', 'food', 'rum', 'repairKit', 'cannonball', 'bullets', 'gunpowder', 'strawHat', 'sailorCoat', 'deckBoots', 'hullPlanks'] },
@@ -112,6 +115,7 @@ export class PortUI {
     this.view = 'square';
     this.shopTab = 'general';
     this.shipyardPick = null;
+    this.cosmeticTab = 'paint';
     this.port = null;
   }
 
@@ -158,6 +162,12 @@ export class PortUI {
     const { game } = this;
     if (!this.port) return; // nothing to draw until we have docked somewhere
     const district = DISTRICTS.find((d) => d.id === this.view);
+    const ownerId = game.clans?.portOwner(this.port) ?? null;
+    const clan = ownerId ? CLANS[ownerId] : null;
+    // Standing with the harbour's owner is what actually moves prices,
+    // so it belongs in the header next to the purse.
+    const mult = ownerId ? game.clans.priceMult('general', this.port) : 1;
+    const discount = mult < 0.995 ? Math.round((1 - mult) * 100) : 0;
     this.el.innerHTML = `
       <div class="port-sky"></div>
       <div class="port-shell">
@@ -167,6 +177,14 @@ export class PortUI {
             <h2>${district ? district.name : this.port.name}</h2>
             <span class="port-sub">${district ? this.port.name : 'Harbour Square · Day ' + game.dayNight.day}</span>
           </div>
+          ${clan ? `<div class="port-owner" style="--clan:${clan.color}">
+            <canvas class="port-owner-badge" width="34" height="34"></canvas>
+            <div>
+              <span>Held by</span>
+              <b>${clan.name}</b>
+              <i>${game.clans.label(ownerId)}${discount ? ` · ${discount}% off` : ''}</i>
+            </div>
+          </div>` : ''}
           <div class="port-head-right">
             <div class="port-purse"><span class="purse-coin"></span><b>${game.resources.coins}</b><span>gold</span></div>
             <button class="port-leave">⚓ Set Sail</button>
@@ -176,6 +194,8 @@ export class PortUI {
       </div>`;
 
     const body = this.el.querySelector('.port-body');
+    const badge = this.el.querySelector('.port-owner-badge');
+    if (badge && clan) badge.getContext('2d').drawImage(clanBadge(clan, 34), 0, 0);
     this.el.querySelector('.port-leave').addEventListener('click', () => this.close());
     this.el.querySelector('.port-back')?.addEventListener('click', () => this._go('square'));
 
@@ -451,6 +471,31 @@ export class PortUI {
                <button class="btn wide deed-btn" ${game.resources.coins < 2500 ? 'disabled' : ''}>Buy the deed — 2500 gold</button>`}
         </section>
       </div>
+      ${game.clans.playerClan ? `
+        <section class="port-card own-clan" style="--clan:${game.clans.playerClan.color}">
+          <div class="own-clan-head">
+            <canvas class="own-clan-badge" width="40" height="40"></canvas>
+            <div>
+              <span class="port-note">Registered colours</span>
+              <h3>${game.clans.playerClan.name}</h3>
+              <p class="port-note">${game.clans.playerClan.members?.length ?? 0} sworn hands · founded day ${game.clans.playerClan.founded}</p>
+            </div>
+          </div>
+        </section>`
+        : game.clans.canFound ? `
+        <section class="port-card found-card">
+          <h3>Register Your Colours</h3>
+          <p class="port-note">Word of you has travelled. The harbourmaster will enter a new
+          clan in the register — your name, your flag, your rules.</p>
+          <button class="btn wide found-btn">Found your clan</button>
+        </section>`
+        : `
+        <section class="port-card">
+          <h3>The Register</h3>
+          <p class="port-note">The harbourmaster keeps the roll of recognised clans.
+          Reach an average standing of +35 across the six and yours can join it —
+          currently ${game.clans.globalRep >= 0 ? '+' : ''}${game.clans.globalRep}.</p>
+        </section>`}
       <section class="port-card">
         <div class="card-head">
           <h3>Sell Cargo</h3>
@@ -486,6 +531,9 @@ export class PortUI {
       }));
     }
 
+    const ownBadge = body.querySelector('.own-clan-badge');
+    if (ownBadge) ownBadge.getContext('2d').drawImage(clanBadge(game.clans.playerClan, 40), 0, 0);
+    body.querySelector('.found-btn')?.addEventListener('click', () => this._openFounding());
     body.querySelector('.repair-btn')?.addEventListener('click', () => {
       if (missing <= 0 || game.resources.coins < cost) return;
       game.resources.coins -= cost;
@@ -524,6 +572,143 @@ export class PortUI {
       game.events.emit('sfx', 'coin');
       this.render();
     });
+  }
+
+  /* ---- founding your own clan ------------------------------------------- */
+
+  /**
+   * The founding sheet. Every choice here is visual and permanent-feeling,
+   * so it gets a live preview of the flag rather than a list of names —
+   * you should be looking at your colours before you commit to them.
+   */
+  _openFounding() {
+    const { game } = this;
+    const palette = ['#c9384a', '#e0b345', '#3fc2b0', '#9b6ef0', '#6fce62', '#5aa5f0', '#f07a3c', '#e8e4da'];
+    const emblems = ['skull', 'blade', 'anchor', 'crown', 'star', 'eye', 'wave', 'gull', 'coin'];
+    const state = { name: '', color: palette[0], emblem: 'skull' };
+
+    const el = document.createElement('div');
+    el.className = 'found-modal';
+    el.innerHTML = `
+      <div class="found-sheet">
+        <span class="fanfare-eyebrow">A new power at sea</span>
+        <h2>Found Your Clan</h2>
+        <div class="found-body">
+          <div class="found-preview">
+            <canvas class="found-badge" width="96" height="96"></canvas>
+            <canvas class="found-flag" width="120" height="76"></canvas>
+            <b class="found-name-preview">Your Clan</b>
+          </div>
+          <div class="found-controls">
+            <label class="found-field">
+              <span>Clan name</span>
+              <input class="found-name" maxlength="28" placeholder="The Iron Verdict" />
+            </label>
+            <div class="found-field">
+              <span>Colour</span>
+              <div class="found-swatches">
+                ${palette.map((c, i) => `<button class="swatch ${i === 0 ? 'active' : ''}"
+                  data-color="${c}" style="background:${c}" aria-label="colour ${i + 1}"></button>`).join('')}
+              </div>
+            </div>
+            <div class="found-field">
+              <span>Emblem</span>
+              <div class="found-emblems">
+                ${emblems.map((e, i) => `<button class="emblem-pick ${i === 0 ? 'active' : ''}" data-emblem="${e}">
+                  <canvas width="22" height="22" data-e="${e}"></canvas></button>`).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="found-actions">
+          <button class="mini-btn ghost found-cancel">Not yet</button>
+          <button class="btn found-confirm" disabled>Raise the colours</button>
+        </div>
+      </div>`;
+    this.el.appendChild(el);
+
+    const badge = el.querySelector('.found-badge');
+    const flag = el.querySelector('.found-flag');
+    const nameOut = el.querySelector('.found-name-preview');
+    const confirm = el.querySelector('.found-confirm');
+
+    const redraw = () => {
+      const mock = {
+        color: state.color,
+        accent: '#f4ecd8',
+        emblem: state.emblem,
+        flagBody: state.color,
+        flagMark: '#f4ecd8',
+      };
+      badge.getContext('2d').clearRect(0, 0, 96, 96);
+      badge.getContext('2d').drawImage(clanBadge(mock, 96), 0, 0);
+      const fg = flag.getContext('2d');
+      fg.clearRect(0, 0, 120, 76);
+      fg.imageSmoothingEnabled = false;
+      // A hanging banner rather than the sea pennant: the pennant's ripple
+      // is authored for 11 pixels wide and turns into a jagged blob when
+      // it is blown up this far.
+      const bn = clanBanner(mock, 26, 38);
+      fg.drawImage(bn, (120 - 26 * 2) / 2, 0, 26 * 2, 38 * 2);
+      nameOut.textContent = state.name || 'Your Clan';
+      nameOut.style.color = state.color;
+      confirm.disabled = state.name.trim().length < 3;
+    };
+
+    el.querySelectorAll('[data-e]').forEach((c) => {
+      c.getContext('2d').drawImage(clanEmblem(c.dataset.e, '#e8ddc4', 22, '#12101a'), 0, 0);
+    });
+    el.querySelector('.found-name').addEventListener('input', (ev) => {
+      state.name = ev.target.value;
+      redraw();
+    });
+    el.querySelectorAll('.swatch').forEach((b) => b.addEventListener('click', () => {
+      el.querySelectorAll('.swatch').forEach((o) => o.classList.remove('active'));
+      b.classList.add('active');
+      state.color = b.dataset.color;
+      redraw();
+    }));
+    el.querySelectorAll('.emblem-pick').forEach((b) => b.addEventListener('click', () => {
+      el.querySelectorAll('.emblem-pick').forEach((o) => o.classList.remove('active'));
+      b.classList.add('active');
+      state.emblem = b.dataset.emblem;
+      redraw();
+    }));
+    el.querySelector('.found-cancel').addEventListener('click', () => el.remove());
+    confirm.addEventListener('click', () => {
+      const clan = game.clans.foundClan({
+        name: state.name.trim(),
+        color: state.color,
+        emblem: state.emblem,
+        flagBody: state.color,
+        flagMark: '#f4ecd8',
+      });
+      // Your colours go up on your own mast immediately.
+      game.cosmetics.unlock('flag', 'clan');
+      game.cosmetics.equip('flag', 'clan');
+      game.events.emit('sfx', 'victory');
+      game.ads?.happytime?.();
+      el.remove();
+      this.render();
+      this._celebrateClan(clan);
+    });
+    redraw();
+  }
+
+  _celebrateClan(clan) {
+    const el = document.createElement('div');
+    el.className = 'ship-fanfare';
+    el.innerHTML = `
+      <div class="fanfare-card" style="box-shadow: inset 0 0 0 2px ${clan.color}, 0 10px 0 rgba(0,0,0,0.5), 0 0 60px ${clan.color}55">
+        <span class="fanfare-eyebrow">The register is signed</span>
+        <h2 style="color:${clan.color}">${clan.name}</h2>
+        <p>Your colours fly. Every hand you take from now on sails under them.</p>
+        <canvas class="fanfare-clan" width="110" height="110"></canvas>
+        <button class="btn">Take the helm</button>
+      </div>`;
+    this.el.appendChild(el);
+    el.querySelector('.fanfare-clan').getContext('2d').drawImage(clanBadge(clan, 110), 0, 0);
+    el.querySelector('.btn').addEventListener('click', () => el.remove());
   }
 
   /* ---- shipyard: the ship shop ------------------------------------------ */
@@ -867,12 +1052,18 @@ export class PortUI {
   _renderTavern(body) {
     const { game } = this;
     const rng = this._rng(0x7a7);
+    const ownerId = game.clans.portOwner(this.port);
     const hirelings = [];
     for (let i = 0; i < 3; i++) {
       const seed = (this.port.seed ^ (game.dayNight.day * 131) ^ (i * 7919)) >>> 0;
       const level = 1 + rangeInt(rng, 0, 1 + game.tierAt(this.port.x, this.port.y));
-      const m = createCrewMember(seed, level);
-      m.wage = 40 + level * 35 + (m.traits.includes('greedy') ? 20 : 0);
+      // Most hands in a tavern belong to whoever holds the harbour; the
+      // odd stranger is passing through from somewhere else.
+      const clanId = rng() < 0.75 ? ownerId : CLAN_IDS[rangeInt(rng, 0, CLAN_IDS.length - 1)];
+      const m = createCrewMember(seed, level, clanId);
+      const rank = RANKS.find((r) => r.id === m.rank) ?? RANKS[0];
+      m.wage = Math.round((40 + level * 35) * rank.wageMult) + (m.traits.includes('greedy') ? 20 : 0);
+      m.check = game.recruitment.evaluate(m, 'pay');
       hirelings.push(m);
     }
     const hiredKey = `hired:${this.port.seed}:${game.dayNight.day}`;
@@ -890,8 +1081,12 @@ export class PortUI {
         <div class="crew-cards">
           ${hirelings.map((m, i) => this._crewCardHTML(m, i, {
             hired: hiredSet.includes(i),
-            disabled: hiredSet.includes(i) || full || game.resources.coins < m.wage,
-            action: hiredSet.includes(i) ? 'Signed on' : full ? 'No berth' : `Hire · ${m.wage}g`,
+            disabled: hiredSet.includes(i) || full || !m.check.ok || game.resources.coins < m.wage,
+            action: hiredSet.includes(i) ? 'Signed on'
+              : full ? 'No berth'
+              : !m.check.ok ? 'Will not sign'
+              : `Hire · ${m.wage}g`,
+            note: !m.check.ok && !hiredSet.includes(i) ? (m.check.need ?? m.check.reason) : null,
           })).join('')}
         </div>
       </section>
@@ -936,16 +1131,12 @@ export class PortUI {
       b.addEventListener('click', () => {
         const i = Number(b.dataset.i);
         const m = hirelings[i];
-        if (game.resources.coins < m.wage) return;
-        if (!game.crew.recruit(m)) {
-          game.hud.toast('Crew quarters are full!', '#e05a4a');
+        const r = game.recruitment.attempt(m, 'pay');
+        if (!r.joined) {
+          game.hud.toast(r.message ?? 'They decline.', '#e0b345');
           return;
         }
-        game.resources.coins -= m.wage;
         (game.portHired[hiredKey] = game.portHired[hiredKey] ?? []).push(i);
-        game.events.emit('resources:changed', { ...game.resources });
-        game.events.emit('crew:hired', { name: m.name });
-        game.hud.toast(`${m.name} signs on.`, '#6fce62');
         this.render();
       });
     });
@@ -971,35 +1162,11 @@ export class PortUI {
 
   /** Shared crew card markup — the tavern and the Captain's Log both use it. */
   _crewCardHTML(m, i, opts = {}) {
-    const role = crewRole(m);
-    const frac = m.health / m.maxHealth;
-    const traits = m.traits.map((t) =>
-      `<span class="trait-chip" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('');
-    return `<article class="crew-card" data-i="${i}">
-      <div class="crew-card-top">
-        <canvas class="crew-portrait" width="64" height="64" data-i="${i}"></canvas>
-        <div class="crew-ident">
-          <b>${m.name}</b>
-          <span class="crew-role">${role.icon} ${role.name}</span>
-          <span class="crew-lvl">Level ${m.level}</span>
-        </div>
-      </div>
-      <div class="crew-stats">
-        <div class="crew-stat"><span>Health</span><div class="crew-hpbar"><i style="width:${Math.round(frac * 100)}%"></i></div><b>${Math.round(m.health)}</b></div>
-        <div class="crew-stat"><span>Weapon</span><b class="crew-weapon">${ITEMS[m.weapon]?.name ?? 'Fists'}</b></div>
-      </div>
-      <div class="crew-traits">${traits}</div>
-      ${opts.action ? `<button class="mini-btn crew-action" data-i="${i}" ${opts.disabled ? 'disabled' : ''}>${opts.action}</button>` : ''}
-    </article>`;
+    return crewCardHTML(m, i, opts);
   }
 
   _paintCrewCards(root, list) {
-    root.querySelectorAll('.crew-portrait').forEach((c) => {
-      const m = list[Number(c.dataset.i)];
-      if (!m) return;
-      const face = faceFromAppearance(m.appearance, hashId(m.id));
-      c.getContext('2d').drawImage(portraitCanvas(face, crewRole(m).mood), 0, 0);
-    });
+    paintCrewPortraits(root, list);
   }
 
   /* ---- market ------------------------------------------------------------ */
@@ -1025,7 +1192,7 @@ export class PortUI {
     const { game } = this;
     const shop = SHOPS[shopKey];
     const rng = this._rng(shopKey.length);
-    const factionMult = game.factions?.priceMult(shopKey) ?? 1;
+    const factionMult = game.clans?.priceMult(shopKey, this.port) ?? 1;
     const dailyMult = game.daily?.modifier?.prices ?? 1;
     const markup = (shopKey === 'black' ? 1.4 : 1) * factionMult * dailyMult;
     const stock = [];
@@ -1081,40 +1248,162 @@ export class PortUI {
 
   _renderOutfitter(body) {
     const { game } = this;
-    const { SAILS, FLAGS, FIGUREHEADS, LANTERNS } = game.cosmeticsDefs;
-    const section = (kind, defs, label) => {
-      const rows = Object.entries(defs)
-        .filter(([, d]) => d.cost)
-        .map(([id, d]) => {
-          const owned = game.cosmetics.isUnlocked(kind, id);
-          const afford = game.resources.coins >= d.cost;
-          return `<div class="shop-row" style="--rar:#c8cdd2">
-            <div class="shop-info"><span class="shop-name">${d.name}</span>
-            <span class="shop-desc">${label} cosmetic</span></div>
-            <button class="mini-btn cos-buy" data-kind="${kind}" data-id="${id}" data-cost="${d.cost}"
-              ${owned || !afford ? 'disabled' : ''}>${owned ? 'Owned' : `${d.cost}g`}</button>
-          </div>`;
-        }).join('');
-      return rows ? `<section class="port-card"><h3>${label}</h3><div class="shop-list">${rows}</div></section>` : '';
+    const defs = game.cosmeticsDefs;
+    const own = game.clans.playerClan;
+    // Categories in the order a shipwright would work through them.
+    const CATS = [
+      { kind: 'paint', name: 'Hull Paint', entries: null },
+      { kind: 'sail', name: 'Sails', entries: defs.SAILS },
+      { kind: 'pattern', name: 'Sail Patterns', entries: defs.SAIL_PATTERNS },
+      { kind: 'flag', name: 'Flags', entries: defs.FLAGS },
+      { kind: 'figurehead', name: 'Figureheads', entries: defs.FIGUREHEADS },
+      { kind: 'cannon', name: 'Cannons', entries: defs.CANNONS },
+      { kind: 'cannonfx', name: 'Cannon Effects', entries: defs.CANNON_FX },
+      { kind: 'lantern', name: 'Lanterns', entries: defs.LANTERNS },
+      { kind: 'decor', name: 'Deck Fittings', entries: defs.DECOR },
+    ];
+    if (!CATS.some((c) => c.kind === this.cosmeticTab)) this.cosmeticTab = 'paint';
+    const cat = CATS.find((c) => c.kind === this.cosmeticTab);
+
+    const optionHTML = (id, def, kind) => {
+      const owned = kind === 'paint'
+        ? game.shipState.paints.includes(id)
+        : game.cosmetics.isUnlocked(kind, id);
+      const active = kind === 'paint'
+        ? game.shipState.paint === id
+        : game.cosmetics.equipped[kind] === id;
+      const cost = def.cost ?? 0;
+      // No cost and not owned means it is an unlock — earned, not bought.
+      const locked = !owned && !def.cost;
+      const swatch = def.tint ? def.tint.replace(/[\d.]+\)$/, '1)')
+        : def.barrel ? def.barrel
+        : def.color ? `rgb(${def.color.join(',')})`
+        : def.body ? def.body
+        : null;
+      return `<button class="cos-option ${active ? 'active' : ''} ${locked ? 'locked' : ''}"
+        data-kind="${kind}" data-id="${id}" ${locked ? 'disabled' : ''}>
+        ${swatch ? `<i class="cos-swatch" style="background:${swatch}"></i>`
+          : '<i class="cos-swatch none"></i>'}
+        <span class="cos-name">${def.name}</span>
+        <span class="cos-state">${active ? 'Fitted' : owned ? 'Owned' : locked ? '🔒 Earned' : `${cost}g`}</span>
+      </button>`;
     };
+
+    const entries = cat.kind === 'paint'
+      ? PAINTS.map((p) => optionHTML(p.id, p, 'paint')).join('')
+      : Object.entries(cat.entries).map(([id, def]) => {
+        // The clan pattern and clan flag only mean anything once you have
+        // colours of your own to put on them.
+        if ((id === 'clan') && !own) return '';
+        return optionHTML(id, def, cat.kind);
+      }).join('');
+
     body.innerHTML = `
-      <p class="board-intro">Fit what you buy from the Locker tab of your Captain's Log (L).
-      Rarer looks come from collections, achievements and legend.</p>
-      ${section('sail', SAILS, 'Sails')}
-      ${section('flag', FLAGS, 'Flags')}
-      ${section('figurehead', FIGUREHEADS, 'Figureheads')}
-      ${section('lantern', LANTERNS, 'Lanterns')}`;
-    body.querySelectorAll('.cos-buy').forEach((b) => {
+      <div class="customize">
+        <section class="cos-preview-panel">
+          <canvas class="cos-preview" width="150" height="150"></canvas>
+          <div class="cos-fitted">
+            ${CATS.map((c) => {
+              const id = c.kind === 'paint' ? game.shipState.paint : game.cosmetics.equipped[c.kind];
+              const def = c.kind === 'paint' ? PAINTS.find((p) => p.id === id) : c.entries[id];
+              return `<div><span>${c.name}</span><b>${def?.name ?? '—'}</b></div>`;
+            }).join('')}
+          </div>
+        </section>
+        <section class="cos-picker">
+          <div class="cos-tabs">
+            ${CATS.map((c) => `<button class="cos-tab ${c.kind === this.cosmeticTab ? 'active' : ''}"
+              data-cat="${c.kind}">${c.name}</button>`).join('')}
+          </div>
+          <div class="cos-options">${entries}</div>
+          <p class="port-note">Everything here is a look, not a stat. Locked pieces come from
+          collections, achievements, legend and the great ships.</p>
+        </section>
+      </div>`;
+
+    this._drawShipPreview(body.querySelector('.cos-preview'));
+    body.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
+      this.cosmeticTab = b.dataset.cat;
+      game.events.emit('sfx', 'ui');
+      this.render();
+    }));
+    body.querySelectorAll('.cos-option').forEach((b) => {
       b.addEventListener('click', () => {
-        const cost = Number(b.dataset.cost);
-        if (game.resources.coins < cost) return;
-        game.resources.coins -= cost;
-        game.cosmetics.unlock(b.dataset.kind, b.dataset.id);
-        game.cosmetics.equip(b.dataset.kind, b.dataset.id);
-        game.events.emit('resources:changed', { ...game.resources });
+        const { kind, id } = b.dataset;
+        if (kind === 'paint') {
+          const p = PAINTS.find((x) => x.id === id);
+          if (!game.shipState.paints.includes(id)) {
+            if (game.resources.coins < p.cost) {
+              game.hud.toast('Not enough gold.', '#e05a4a');
+              return;
+            }
+            game.resources.coins -= p.cost;
+            game.shipState.paints.push(id);
+            game.events.emit('resources:changed', { ...game.resources });
+          }
+          game.shipState.paint = id;
+        } else {
+          const def = game.cosmeticsDefs[{
+            sail: 'SAILS', flag: 'FLAGS', figurehead: 'FIGUREHEADS', lantern: 'LANTERNS',
+            cannon: 'CANNONS', cannonfx: 'CANNON_FX', pattern: 'SAIL_PATTERNS', decor: 'DECOR',
+          }[kind]][id];
+          if (!game.cosmetics.isUnlocked(kind, id)) {
+            const cost = def.cost ?? 0;
+            if (!cost || game.resources.coins < cost) {
+              game.hud.toast(cost ? 'Not enough gold.' : 'That one has to be earned.', '#e05a4a');
+              return;
+            }
+            game.resources.coins -= cost;
+            game.cosmetics.unlock(kind, id);
+            game.events.emit('resources:changed', { ...game.resources });
+          }
+          game.cosmetics.equip(kind, id);
+        }
         game.events.emit('sfx', 'buy');
         this.render();
       });
     });
   }
+
+  /**
+   * The player's actual ship, drawn with everything currently fitted —
+   * the point of a customization screen is seeing the change before you
+   * pay for it, not reading a list of names.
+   */
+  _drawShipPreview(canvas) {
+    if (!canvas) return;
+    const { game } = this;
+    const g = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    g.clearRect(0, 0, W, H);
+    g.imageSmoothingEnabled = false;
+    const water = g.createLinearGradient(0, 0, 0, H);
+    water.addColorStop(0, '#1c3252');
+    water.addColorStop(1, '#0e1e36');
+    g.fillStyle = water;
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(255,255,255,0.04)';
+    for (let y = 0; y < H; y += 4) g.fillRect(0, y, W, 1);
+
+    // Sync fittings, then let the ship draw itself bow-up in the middle.
+    game._syncPaint();
+    g.save();
+    g.translate(W / 2, H / 2);
+    g.scale(2.1, 2.1);
+    // Point her north by setting the heading rather than rotating the
+    // context: the captain sprite is deliberately drawn unrotated in
+    // world space, so a rotated context lays them on their side.
+    const ship = game.ship;
+    const keep = { x: ship.x, y: ship.y, heading: ship.heading, bob: ship.bob, roll: ship.roll };
+    ship.x = 0;
+    ship.y = 0;
+    ship.heading = -Math.PI / 2;
+    ship.bob = 0;
+    ship.roll = 0;
+    ship.draw(g, game.time, game.dayNight);
+    Object.assign(ship, keep);
+    g.restore();
+  }
+
 }

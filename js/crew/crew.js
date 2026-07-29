@@ -5,6 +5,7 @@
 import { mulberry32, pick, rangeInt } from '../util/random.js';
 import { randomAppearance } from '../render/pirate.js';
 import { ITEMS } from '../items/itemdefs.js';
+import { CLANS, CLAN_IDS } from '../world/clans.js';
 
 const FIRST = ['Salty', 'One-Eye', 'Mad', 'Quiet', 'Lucky', 'Iron', 'Red', 'Bones', 'Gully', 'Old',
   'Young', 'Stormy', 'Rat', 'Fish', 'Black', 'Gold-Tooth', 'Whistling', 'Barnacle', 'Grim', 'Merry'];
@@ -26,9 +27,28 @@ export const TRAITS = {
 
 const CREW_WEAPONS = ['rustyCutlass', 'cutlass', 'flintlock', 'musket', 'officerSaber'];
 
+/**
+ * Clan ranks. A pirate's rank decides how hard they are to turn: a
+ * deckhand will follow anyone who pays, a captain has to be beaten or
+ * genuinely won over.
+ */
+export const RANKS = [
+  { id: 'deckhand', name: 'Deckhand', minLevel: 1, pull: 0, wageMult: 1 },
+  { id: 'bosun', name: 'Bosun', minLevel: 3, pull: 15, wageMult: 1.6 },
+  { id: 'quartermaster', name: 'Quartermaster', minLevel: 5, pull: 35, wageMult: 2.4 },
+  { id: 'firstmate', name: 'First Mate', minLevel: 7, pull: 55, wageMult: 3.4 },
+  { id: 'captain', name: 'Captain', minLevel: 9, pull: 75, wageMult: 5 },
+];
+
+export function rankFor(level) {
+  let out = RANKS[0];
+  for (const r of RANKS) if (level >= r.minLevel) out = r;
+  return out;
+}
+
 let nextCrewId = 1;
 
-export function createCrewMember(seed, level = 1) {
+export function createCrewMember(seed, level = 1, clanId = null) {
   const rng = mulberry32(seed >>> 0);
   const traitKeys = Object.keys(TRAITS);
   const t1 = pick(rng, traitKeys);
@@ -38,6 +58,7 @@ export function createCrewMember(seed, level = 1) {
     ? 'officerSaber'
     : CREW_WEAPONS[Math.min(CREW_WEAPONS.length - 2, rangeInt(rng, 0, 1 + Math.floor(level / 2)))];
   const maxHealth = 40 + level * 14 + rangeInt(rng, 0, 10);
+  const rank = rankFor(level);
   return {
     id: `crew${nextCrewId++}_${seed.toString(36)}`,
     name: `${pick(rng, FIRST)} ${pick(rng, LAST)}`,
@@ -47,6 +68,13 @@ export function createCrewMember(seed, level = 1) {
     health: maxHealth,
     weapon,
     traits: t2 ? [t1, t2] : [t1],
+    // Clan identity. Everyone came from somewhere, and loyalty is what
+    // they think of you now rather than who they used to sail with.
+    rank: rank.id,
+    originClan: clanId ?? pick(rng, CLAN_IDS),
+    loyalty: 50,
+    ship: null,
+    joinedBy: null,
   };
 }
 

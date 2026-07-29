@@ -391,7 +391,7 @@ export class Boarding {
     } else {
       game.onBoardingLoss(this.aiShip);
     }
-    game.events.emit('boarding:end', { outcome: this.outcome });
+    game.events.emit('boarding:end', { outcome: this.outcome, ship: this.aiShip });
   }
 
   /* ---- rendering -------------------------------------------------------------- */

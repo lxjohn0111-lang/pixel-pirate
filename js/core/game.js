@@ -26,6 +26,7 @@ import { ITEMS, RARITY, RARITY_ORDER, bestRarity } from '../items/itemdefs.js';
 import { Player } from '../entities/player.js';
 import { ShipState, PAINTS } from '../entities/shipstate.js';
 import { CrewSystem, createCrewMember } from '../crew/crew.js';
+import { Recruitment } from '../crew/recruitment.js';
 import { ShipCombat } from '../combat/shipcombat.js';
 import { Boarding } from '../combat/boarding.js';
 import { Encounters } from '../world/encounters.js';
@@ -39,18 +40,19 @@ import { rollLoot } from '../items/itemdefs.js';
 import { mulberry32 } from '../util/random.js';
 import { dist2 } from '../util/math.js';
 // Part 3
-import { Factions } from '../world/factions.js';
+import { Clans } from '../world/clans.js';
 import { Stats } from '../meta/stats.js';
 import { Collection } from '../meta/collection.js';
 import { Achievements } from '../meta/achievements.js';
 import { Daily } from '../meta/daily.js';
-import { Cosmetics, SAILS, FLAGS, FIGUREHEADS, LANTERNS } from '../meta/cosmetics.js';
+import { Cosmetics, SAILS, FLAGS, FIGUREHEADS, LANTERNS, CANNONS, CANNON_FX, SAIL_PATTERNS, DECOR } from '../meta/cosmetics.js';
 import { WorldEvents } from '../world/events.js';
 import { Legends } from '../world/legends.js';
 import { Dungeon } from '../world/dungeons.js';
 import { Fishing } from '../systems/fishing.js';
 import { TreasureHunts } from '../systems/treasurehunt.js';
 import { Bounties } from '../world/bounties.js';
+import { NamedShips } from '../world/namedships.js';
 import { Homestead } from '../world/homestead.js';
 import { LogUI } from '../ui/logUI.js';
 import { HomeUI } from '../ui/homeUI.js';
@@ -131,10 +133,14 @@ export class Game {
 
     // ---- Part 3: the living, remembering world ---------------------------
     this.prestige = save?.prestige ?? 0;
-    this.factions = new Factions(this, save?.factions);
+    // Clans took over from the old faction standings and keep the same
+    // API, so everything that reads `factions` still works — the alias is
+    // what makes this an extension rather than a rewrite.
+    this.clans = this.registerSystem(new Clans(this, save?.clans));
+    this.factions = this.clans;
     this.stats = new Stats(this, save?.stats);
     this.cosmetics = new Cosmetics(this, save?.cosmetics);
-    this.cosmeticsDefs = { SAILS, FLAGS, FIGUREHEADS, LANTERNS };
+    this.cosmeticsDefs = { SAILS, FLAGS, FIGUREHEADS, LANTERNS, CANNONS, CANNON_FX, SAIL_PATTERNS, DECOR };
     this.collection = new Collection(this, save?.collection);
     this.achievements = new Achievements(this, save?.achievements);
     this.daily = new Daily(this, save?.daily);
@@ -145,6 +151,8 @@ export class Game {
     this.fishing = this.registerSystem(new Fishing(this));
     this.treasureHunts = new TreasureHunts(this, save?.treasureHunts);
     this.bounties = new Bounties(this, save?.bounties);
+    this.recruitment = new Recruitment(this);
+    this.namedShips = this.registerSystem(new NamedShips(this, save?.namedShips));
     if (this.prestige > 0) this.cosmetics.unlock('flag', 'legend');
 
     // First voyage: a captain needs the basics.
@@ -317,9 +325,21 @@ export class Game {
     const sail = SAILS[eq.sail];
     this.ship.sailStyle = sail && (sail.tint || sail.mark) ? { id: eq.sail, tint: sail.tint, mark: sail.mark } : null;
     const flag = FLAGS[eq.flag];
-    this.ship.flagStyle = eq.flag !== 'black' && flag ? { id: eq.flag, body: flag.body, mark: flag.mark } : null;
+    // Your own clan's flag draws from the clan record, so recolouring the
+    // clan recolours the pennant without touching the cosmetics table.
+    const own = this.clans?.playerClan;
+    this.ship.flagStyle = eq.flag === 'clan' && own
+      ? { id: `clan:${own.color}`, body: own.flagBody ?? own.color, mark: own.flagMark ?? '#f4ecd8' }
+      : (eq.flag !== 'black' && flag ? { id: eq.flag, body: flag.body, mark: flag.mark } : null);
     this.ship.figurehead = eq.figurehead;
     this.ship.lanternColor = LANTERNS[eq.lantern]?.color ?? null;
+    // Guns, sail pattern and deck fittings.
+    this.ship.cannonColor = CANNONS[eq.cannon]?.barrel ?? null;
+    const pat = SAIL_PATTERNS[eq.pattern];
+    this.ship.sailPattern = pat && pat.pattern
+      ? { id: eq.pattern, pattern: pat.pattern, clanColor: own?.color ?? null }
+      : null;
+    this.ship.decorId = eq.decor;
     const charm = this.inventory.equipment.charm;
     this.ship.petId = charm === 'parrot' || charm === 'monkey' ? charm : null;
   }
@@ -380,11 +400,14 @@ export class Game {
     show();
   }
 
-  offerRecruit(member, flavor) {
+  offerRecruit(member, flavor, route = 'rescue') {
     this.lootUI.showRecruit(member, flavor, (yes) => {
-      if (yes && !this.crew.recruit(member)) {
-        this.hud.toast('Crew quarters are full!', '#e05a4a');
-      }
+      if (!yes) return;
+      // Rescues and freed prisoners come to you willingly, so they go
+      // through recruitment for the loyalty and clan bookkeeping but are
+      // never asked for coin.
+      const r = this.recruitment.attempt(member, route, { free: true });
+      if (!r.joined) this.hud.toast(r.message ?? 'They decline.', '#e05a4a');
     });
   }
 
@@ -819,7 +842,7 @@ export class Game {
       portHired: this.portHired,
       // Part 3
       prestige: this.prestige,
-      factions: this.factions.serialize(),
+      clans: this.clans.serialize(),
       stats: this.stats.serialize(),
       collection: this.collection.serialize(),
       achievements: this.achievements.serialize(),
@@ -829,6 +852,7 @@ export class Game {
       legends: this.legends.serialize(),
       treasureHunts: this.treasureHunts.serialize(),
       bounties: this.bounties.serialize(),
+      namedShips: this.namedShips.serialize(),
       story: this.story.serialize(),
       mapData: {
         explored: [...this.mapData.explored],

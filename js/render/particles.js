@@ -193,7 +193,11 @@ export class Particles {
 /* Part 2: combat particle spawners (smoke, fire, splinters)           */
 /* ------------------------------------------------------------------ */
 
-Particles.prototype.spawnSmoke = function (x, y, big = false) {
+/**
+ * Muzzle smoke. `tint` is an "r,g,b" string from the fitted cannon
+ * effect, so the player's broadsides look like theirs.
+ */
+Particles.prototype.spawnSmoke = function (x, y, big = false, tint = null) {
   const n = Math.round((big ? 5 : 2) * this.quality) || 1;
   for (let i = 0; i < n; i++) {
     this._push('above', {
@@ -205,7 +209,7 @@ Particles.prototype.spawnSmoke = function (x, y, big = false) {
       life: 0.9 + Math.random() * 0.8,
       size: big ? 3 : 2,
       growth: 4,
-      color: '190,190,200',
+      color: tint ?? '190,190,200',
       alpha: 0.45,
       drag: 1.2,
     });

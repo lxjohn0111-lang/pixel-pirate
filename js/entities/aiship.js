@@ -6,6 +6,8 @@
 import { TAU, clamp, angleDiff, lerp, damp } from '../util/math.js';
 import { aiShipHull, aiShipSail } from '../render/sprites.js';
 import { mulberry32, rangeInt, range } from '../util/random.js';
+import { CLANS } from '../world/clans.js';
+import { clanEmblem, clanFlag } from '../render/clanart.js';
 
 let nextShipId = 1;
 
@@ -50,6 +52,9 @@ export class AIShip {
     this._wanderDir = this.heading;
     this._fireTimer = 0;
     this.looted = false;
+    /** Owning clan — set by the spawner from the waters it appears in. */
+    this.clanId = null;
+    this.shipName = null;
     // living-world state
     this.foe = null;
     this.fleeFrom = null;
@@ -59,12 +64,22 @@ export class AIShip {
     this._retarget = Math.random() * 1.2;
   }
 
-  /** Choose a ship-vs-ship target based on faction instincts. */
+  /** Choose a ship-vs-ship target based on clan politics, then instinct. */
   _pickFoe(game) {
-    const hunts = {
+    // Clan wars come first: two ships whose clans are at war will go for
+    // each other regardless of what they are carrying, which is what
+    // makes the sea look like it has its own quarrels.
+    const clans = game.clans;
+    const atWarWith = (s) => clans && this.clanId && s.clanId
+      && s.clanId !== this.clanId && clans.atWar(this.clanId, s.clanId);
+    const instinct = {
       pirate: (s) => s.type === 'merchant' || s.type === 'civilian' || s.type === 'fishing',
       navy: (s) => s.type === 'pirate' || s.type === 'ghost',
     }[this.type];
+    // An unarmed hull picks no fights, but an armed one will answer a war.
+    const hunts = this.cannons > 0
+      ? (s) => atWarWith(s) || (instinct ? instinct(s) : false)
+      : instinct;
     if (!hunts) return null;
     let best = null;
     let bestD = 380 * 380;
@@ -256,7 +271,10 @@ export class AIShip {
     if (this.hull <= 0) {
       this.state = 'sinking';
       this.sinkT = 0;
-      game.events.emit('ship:sunk', { id: this.id, type: this.type, byPlayer: !!fromPlayer, x: this.x, y: this.y });
+      game.events.emit('ship:sunk', {
+        id: this.id, type: this.type, byPlayer: !!fromPlayer,
+        x: this.x, y: this.y, clanId: this.clanId, shipName: this.shipName,
+      });
       return true;
     }
     return false;
@@ -283,7 +301,8 @@ export class AIShip {
     g.rotate(this.heading + Math.sin(this.bob * 1.7) * 0.03 + sink * 0.5);
     const ghostly = this.type === 'ghost';
     g.globalAlpha = (ghostly ? 0.68 + Math.sin(this.bob * 2.4) * 0.1 : 1) * (1 - sink * 0.85);
-    const scale = 1 - sink * 0.25; // slipping under
+    // Named ships are physically bigger hulls, not just tougher ones.
+    const scale = (this.hullScale ?? 1) * (1 - sink * 0.25); // slipping under
     g.scale(scale, scale);
     if (ghostly) {
       // spectral aura
@@ -294,8 +313,38 @@ export class AIShip {
     }
     g.drawImage(hull, -hull.width / 2, -hull.height / 2);
     if ((this.speed > 8 || ghostly) && sink === 0) g.drawImage(sail, -sail.width / 2, -sail.height / 2);
+    // The clan pennant rides the stern, rotating with the hull so it
+    // reads as rigging rather than an overlay.
+    const clan = this.clanId ? CLANS[this.clanId] : null;
+    if (clan && sink === 0) {
+      const fl = clanFlag(clan, (t * 5) | 0, 11, 7);
+      g.drawImage(fl, -hull.width / 2 - 2, -8);
+    }
     g.restore();
     g.globalAlpha = 1;
+
+    // ---- clan identification -------------------------------------------
+    // Name and emblem sit upright above the ship, never rotated, so the
+    // player can read allegiance at a glance from any angle.
+    if (clan && this.state === 'sailing' && sink === 0) {
+      const top = Math.round(this.y - hull.height / 2 - (this.hull < this.maxHull ? 16 : 11));
+      const name = this.shipName ?? clan.short;
+      g.font = '7px "Courier New", monospace';
+      g.textAlign = 'center';
+      const tw = Math.ceil(g.measureText(name).width);
+      const icon = clanEmblem(clan.emblem, clan.accent ?? '#fff', 9, clan.color);
+      const boxW = tw + 15;
+      const bx = Math.round(this.x - boxW / 2);
+      // plate behind the text keeps it legible over bright water
+      g.fillStyle = 'rgba(10,16,30,0.62)';
+      g.fillRect(bx, top - 7, boxW, 10);
+      g.fillStyle = clan.color;
+      g.fillRect(bx, top - 7, 2, 10);
+      g.drawImage(icon, bx + 3, top - 6);
+      g.fillStyle = clan.color;
+      g.fillText(name, Math.round(this.x) + 6, top + 1);
+      g.textAlign = 'left';
+    }
 
     // health bar when damaged (fades when full)
     if (this.state === 'sailing' && this.hull < this.maxHull) {

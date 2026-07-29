@@ -9,6 +9,7 @@ import { TRAITS, crewRole, hashId } from '../crew/crew.js';
 import { UPGRADES, PAINTS } from '../entities/shipstate.js';
 import { HULLS, HULL_ORDER } from '../entities/ships.js';
 import { portraitCanvas, faceFromAppearance } from '../render/portrait.js';
+import { crewCardHTML, paintCrewPortraits } from './crewcard.js';
 
 
 const SLOT_LABELS = {
@@ -445,18 +446,12 @@ export class InventoryUI {
         </div>
       </div>
       <div class="crew-cards">
-        ${members.map((m, i) => this._crewCard(m, i)).join('')
+        ${members.map((m, i) => crewCardHTML(m, i, { action: 'Put ashore', ghost: true })).join('')
           || '<p class="empty-note">No crew yet. Rescue survivors, free castaways, or hire hands in port taverns.</p>'}
       </div>
       <p class="panel-note">Crew man the guns, fight beside you in boardings — and can die there. Forever.</p>`;
 
-    body.querySelectorAll('.crew-portrait').forEach((c) => {
-      const m = members[Number(c.dataset.i)];
-      if (!m) return;
-      c.getContext('2d').drawImage(
-        portraitCanvas(faceFromAppearance(m.appearance, hashId(m.id)), crewRole(m).mood), 0, 0,
-      );
-    });
+    paintCrewPortraits(body, members);
     body.querySelectorAll('.crew-action').forEach((btn) => {
       btn.addEventListener('click', () => {
         const m = members[Number(btn.dataset.i)];
@@ -466,29 +461,6 @@ export class InventoryUI {
         }
       });
     });
-  }
-
-  _crewCard(m, i) {
-    const role = crewRole(m);
-    const frac = m.health / m.maxHealth;
-    const traits = m.traits.map((t) =>
-      `<span class="trait-chip" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('');
-    return `<article class="crew-card">
-      <div class="crew-card-top">
-        <canvas class="crew-portrait" width="64" height="64" data-i="${i}"></canvas>
-        <div class="crew-ident">
-          <b>${m.name}</b>
-          <span class="crew-role">${role.icon} ${role.name}</span>
-          <span class="crew-lvl">Level ${m.level}</span>
-        </div>
-      </div>
-      <div class="crew-stats">
-        <div class="crew-stat"><span>Health</span><div class="crew-hpbar"><i style="width:${Math.round(frac * 100)}%"></i></div><b>${Math.round(m.health)}</b></div>
-        <div class="crew-stat"><span>Weapon</span><b class="crew-weapon">${ITEMS[m.weapon]?.name ?? 'Fists'}</b></div>
-      </div>
-      <div class="crew-traits">${traits}</div>
-      <button class="mini-btn crew-action ghost" data-i="${i}">Put ashore</button>
-    </article>`;
   }
 
   /* ---- ship tab ------------------------------------------------------------ */

@@ -88,6 +88,7 @@ export class Bounties {
         hullMult: def.hullMult,
         tier: tier + rank,
         appearance: randomAppearance((seed ^ 0xface) >>> 0),
+        clanId: this.game.clans?.ownerOfRegion(port.x, port.y) ?? null,
         seed,
         portName: port.name,
         taken: this.done.has(id) || this.active?.id === id,
@@ -118,6 +119,7 @@ export class Bounties {
       hullMult: offer.hullMult,
       tier: offer.tier,
       appearance: offer.appearance,
+      clanId: offer.clanId,
       seed: offer.seed,
       portName: port.name,
       x: Math.round(port.x + Math.cos(a) * d),
@@ -222,6 +224,14 @@ export class Bounties {
     s.crewCount += b.rank;
     s.maxSpeed *= 1.08;
     s.hostileToPlayer = true;
+    // Bounty targets are outlaws, but they came from somewhere — their
+    // old clan takes the loss personally.
+    // Outlaws still came from somewhere; their old clan takes the loss
+    // personally when you collect.
+    game.combat.assignClan(s, b.x, b.y);
+    if (b.clanId) s.clanId = b.clanId;
+    s.hostileToPlayer = true;
+    s.shipName = b.shipName;
     s.bountyId = b.id;
     s.customLabel = b.shipName;
     s.lootTable = 'pirateShip';

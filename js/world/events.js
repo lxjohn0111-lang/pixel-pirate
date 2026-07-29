@@ -181,6 +181,9 @@ function spawnShip(game, type, x, y) {
     if (!game.world.isOpenWater(x, y)) return null;
   }
   const s = new AIShip(type, x, y, game.tierAt(x, y));
+  // Event fleets fly colours too — a blockade of unaffiliated hulls
+  // would be the one place in the world where clans stopped existing.
+  game.combat.assignClan(s, x, y);
   game.combat.ships.push(s);
   return s;
 }
