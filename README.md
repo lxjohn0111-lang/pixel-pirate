@@ -450,11 +450,16 @@ the oldest is pushed out — so a burst of pickups can never bury the one
 line that mattered. Every existing `toast()` call site got this for free;
 the icon is inferred from the colour and wording.
 
-## Rewarded ads (CrazyGames SDK)
+## Ads (CrazyGames SDK)
 
-Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/intro/)
-(`js/ads/ads.js`). The rule the module enforces is that an ad is always a
-*favour to the player*, never a toll:
+Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/video-ads/)
+(`js/ads/ads.js`), in both kinds the SDK offers — **rewarded** and
+**midgame** — under different rules.
+
+### Rewarded
+
+The rule the module enforces is that a rewarded ad is always a *favour to
+the player*, never a toll:
 
 - **Nothing is gated.** Declining leaves you exactly where the game would
   have put you anyway. There are no timers to skip and no lives to buy.
@@ -475,6 +480,40 @@ Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.co
 | Double the haul | Inside the loot popup, rare+ or 40+ gold only | Twice the gold and items |
 | Free careening | At a port with a damaged hull | Full repair, no gold |
 | Another heading | Log → Daily, once the free chart is spent | A second charted treasure |
+
+### Midgame
+
+CrazyGames' hard requirement for interstitials is that they may only run
+**when gameplay has stopped**. This game has two moments where it genuinely
+does, and midgame ads are attached to those and nowhere else:
+
+| Trigger | Why it qualifies |
+| ------- | ---------------- |
+| Docking at a port | The world is frozen: the ship cannot move, the clock stops, nothing can attack you. You are reading menus. |
+| End of a boarding or dungeon | The fight is over and the results screens are up. Nobody is steering. |
+
+They never fire mid-sail, never during a fight, and are paced so they read
+as a breath rather than a toll:
+
+- **A 3-minute grace period** at the start of a session, then the **first
+  two stopping points pass for free** — nobody is greeted by an ad.
+- **At least 3½ minutes between interstitials**, plus the same 40 s global
+  gap that governs rewarded offers, so an ad never lands on the heels of one.
+- **A rewarded offer always wins.** A boarding ends into a captured-hold
+  screen, then possibly a *Save the crew* offer, then a freed prisoner
+  asking to sign on. Rather than cutting into that, the break is **armed**
+  and spent only once the deck is clear (`armMidgame` / `tickArmed`); if
+  the player lingers past 45 s the moment is judged gone and the break is
+  dropped rather than ambushing them on the way back to the helm.
+- `gameplayStop()` is always sent **before** `requestAd`, so the SDK is
+  never asked for an interstitial while it believes the player is playing.
+- **`adError` is a non-event.** No reward was promised, so a failed fill
+  simply waves the player through — the game is handed back exactly as an
+  `adFinished` would.
+
+While the ad loads, a curtain explains the pause in the game's own voice
+("Tying up alongside...", "The fighting is over...") so the stop never
+reads as a hitch.
 
 Also wired: `gameplayStart` / `gameplayStop` around menus, pauses and ad
 breaks; audio hard-muted for the duration of an ad (only from `adStarted`,
@@ -526,7 +565,7 @@ js/
 ├── combat/
 │   ├── shipcombat.js    broadsides, projectiles, sinking, drops
 │   └── boarding.js      deck-to-deck real-time combat
-├── ads/ads.js           CrazyGames rewarded ads + offer gating
+├── ads/ads.js           CrazyGames rewarded + midgame ads, gating and pacing
 ├── story/               the campaign layer
 │   ├── story.js         six chapters, goals, markers, contextual barks
 │   ├── dialogue.js      the dialogue stage: beats, typing, choices, barks

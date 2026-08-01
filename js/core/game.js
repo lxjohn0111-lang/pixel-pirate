@@ -197,6 +197,12 @@ export class Game {
     this.ads.init().then(() => this.ads.setGameplayActive(this.state === 'playing'));
     // A real milestone deserves the site's confetti.
     this.events.on('boss:defeated', () => this.ads.happytime());
+    // The other genuine full stop besides docking: a boarding or a dungeon
+    // ends on a results beat with nobody steering. Arm a break — it is
+    // spent once the loot and rescue screens have been dealt with.
+    this.events.on('boarding:end', (e) => {
+      this.ads.armMidgame(e?.ship ? 'boarding' : 'dungeon');
+    });
 
     // Give returning captains their fishing rod; the sea provides.
     if (this.inventory.totalCount('fishingRod') === 0) {
@@ -686,6 +692,8 @@ export class Game {
     this._updateDiscovery(dt);
     this._checkShipwreck();
     this._syncPaint();
+    // An armed break is spent here, before gameplay is reported as resumed.
+    this.ads.tickArmed();
     // Menus and modals are breaks, not gameplay.
     this.ads.setGameplayActive(!this.uiBlocked && !this.inventoryUI.isOpen
       && !this.mapUI.isOpen && !this.logUI.isOpen);

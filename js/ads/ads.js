@@ -1,4 +1,17 @@
-// Rewarded ads via the CrazyGames SDK.
+// Rewarded and midgame ads via the CrazyGames SDK.
+//
+// Two kinds of ad live here and they follow different rules.
+//
+// REWARDED ads are opt-in and always a favour: the player asks for one,
+// and gets something they wanted.
+//
+// MIDGAME ads are the unprompted interstitials CrazyGames expects, and
+// their governing rule is that they may only run when gameplay has
+// actually stopped. This game has genuine stopping points — docking
+// freezes the whole world, and a boarding or dungeon ends on a results
+// beat — so midgame ads are attached to those transitions and nowhere
+// else. They never fire mid-sail, never during a fight, never on the
+// first minute of a session.
 //
 // Design rules this module enforces, so ads never feel like nagging:
 //   1. Every ad is opt-in. Nothing is gated behind one — declining always
@@ -32,6 +45,29 @@ const COOLDOWNS = {
 /** No two offers within this many seconds, whatever the placement. */
 const GLOBAL_GAP = 40;
 
+/* ---- midgame pacing -------------------------------------------------- */
+/** Nothing at all until the player has been aboard this long. */
+const MIDGAME_GRACE = 180;
+/** Minimum gap between two midgame ads. */
+const MIDGAME_INTERVAL = 210;
+/** Free passes before the first midgame ad, so nobody is greeted by one. */
+const MIDGAME_SKIP_FIRST = 2;
+/**
+ * How long an armed break stays valid. A boarding ends into a chain of
+ * result screens the player reads at their own pace; if they linger past
+ * this, the moment has gone and we let it go rather than ambushing them
+ * on the way back to the helm.
+ */
+const MIDGAME_ARM_TTL = 45;
+
+/** Told to the player while the ad loads, so the pause is explained. */
+const MIDGAME_COPY = {
+  break: 'Taking a short break...',
+  port: 'Tying up alongside...',
+  boarding: 'The fighting is over...',
+  dungeon: 'Back to the boats...',
+};
+
 export class AdManager {
   constructor(game) {
     this.game = game;
@@ -44,6 +80,13 @@ export class AdManager {
     this._lastAny = 0;
     this._gameplayActive = false;
     this.el = null;
+
+    // Midgame state. `_breaks` counts the natural stopping points seen so
+    // far; the first couple pass without an ad.
+    this._sessionStart = Date.now();
+    this._lastMidgame = 0;
+    this._breaks = 0;
+    this._armed = null;
   }
 
   /* ------------------------------------------------------------------ */
@@ -185,6 +228,138 @@ export class AdManager {
         finish(false, 'The ad could not be shown. No reward this time.');
       }
     });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Midgame ads                                                         */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Is this a legitimate moment for an interstitial?
+   *
+   * CrazyGames' hard requirement is that midgame ads run only when
+   * gameplay has stopped, so this refuses unless the game itself says it
+   * is not playing — the same flag that drives gameplayStart/Stop. The
+   * rest is pacing: a grace period so a new session is never greeted by
+   * an ad, a couple of free breaks, and a floor on how often one can run.
+   */
+  canShowMidgame() {
+    if (!this.ready || this.showing || this.game.adsDisabled) return false;
+    // Never on top of a rewarded offer, or while one is playing.
+    if (this.el) return false;
+    // Gameplay must genuinely have stopped.
+    if (this._gameplayActive) return false;
+    const now = Date.now();
+    if (now - this._sessionStart < MIDGAME_GRACE * 1000) return false;
+    if (now - this._lastMidgame < MIDGAME_INTERVAL * 1000) return false;
+    if (now - this._lastAny < GLOBAL_GAP * 1000) return false;
+    return true;
+  }
+
+  /**
+   * Offer a break at a natural stopping point. `reason` is only used for
+   * the wording on the curtain, so the player knows why the game paused.
+   *
+   * Returns a promise that resolves when play may resume — whether an ad
+   * ran, was skipped, or failed. Callers can await it, but nothing in the
+   * game does: the stopping points this hangs off are already stopped.
+   */
+  async midgame(reason = 'break') {
+    this._breaks++;
+    if (this._breaks <= MIDGAME_SKIP_FIRST) return false;
+    if (!this.canShowMidgame()) return false;
+
+    this.showing = true;
+    this._lastMidgame = Date.now();
+    this._lastAny = this._lastMidgame;
+    const wasPlaying = this.game.state === 'playing';
+    if (wasPlaying) this.game.state = 'adbreak';
+    // Belt and braces: the caller should already have stopped gameplay,
+    // but the SDK must not see an ad requested while it thinks we play.
+    this.setGameplayActive(false);
+
+    return new Promise((resolve) => {
+      const finish = () => {
+        this._hideCurtain();
+        this.game.audio.setMuted(false);
+        if (wasPlaying) this.game.state = 'playing';
+        this.game._lastTs = performance.now(); // don't bank a huge dt
+        this.setGameplayActive(this.game.state === 'playing' && !this.game.uiBlocked);
+        this.showing = false;
+        this.game.events.emit('ad:midgame-done', { reason });
+        resolve(true);
+      };
+
+      if (this.simulated) {
+        this._simulateMidgame(finish);
+        return;
+      }
+
+      this._showCurtain(MIDGAME_COPY[reason] ?? MIDGAME_COPY.break);
+      try {
+        this.sdk.ad.requestAd('midgame', {
+          adStarted: () => {
+            // Mute only once the ad actually starts, per CrazyGames.
+            this.game.audio.setMuted(true);
+            this._showCurtain('Advertisement');
+          },
+          adFinished: finish,
+          // A midgame ad that cannot be filled is a non-event: no reward
+          // was promised, so the player is simply waved through.
+          adError: finish,
+        });
+      } catch {
+        finish();
+      }
+    });
+  }
+
+  /**
+   * Mark a stopping point that hasn't finished resolving yet.
+   *
+   * A boarding does not end cleanly: it ends into a captured-hold screen,
+   * then possibly a rewarded offer to save the fallen, then a freed
+   * prisoner asking to sign on. Firing an interstitial into the middle of
+   * that would bury a rewarded offer the player wanted, so the break is
+   * armed here and spent by `tickArmed` once the deck is clear.
+   */
+  armMidgame(reason = 'break') {
+    if (this._armed) return;
+    this._armed = { reason, at: Date.now() };
+  }
+
+  /**
+   * Spend an armed break the moment nothing is on screen. Called from the
+   * game loop *before* it reports gameplay as resumed, so the SDK is never
+   * asked for an ad while it believes the player is sailing.
+   */
+  tickArmed() {
+    const armed = this._armed;
+    if (!armed) return;
+    // Result screens and rewarded offers own the moment first.
+    if (this.showing || this.el || this.game.uiBlocked) return;
+    this._armed = null;
+    if (Date.now() - armed.at > MIDGAME_ARM_TTL * 1000) return;
+    this.setGameplayActive(false);
+    this.midgame(armed.reason);
+  }
+
+  /** Dev/offline stand-in for an interstitial. */
+  _simulateMidgame(done) {
+    let left = 2;
+    const paint = () => this._showCurtain(
+      `<b>Simulated midgame ad</b><br><span class="ad-sim-note">CrazyGames SDK not detected — a real interstitial would play here.</span><br>Resuming in ${left}s`,
+    );
+    paint();
+    const iv = setInterval(() => {
+      left--;
+      if (left <= 0) {
+        clearInterval(iv);
+        done();
+      } else {
+        paint();
+      }
+    }, 1000);
   }
 
   /** Blocking curtain so nothing is clickable behind a playing ad. */

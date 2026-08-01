@@ -137,6 +137,12 @@ export class PortUI {
     this.game.events.emit('port:docked', port);
     this.game.events.emit('sfx', 'ui');
     this.render();
+
+    // Docking is a genuine full stop: the world is frozen and the player
+    // is reading menus. Tell the SDK gameplay has ended, then offer the
+    // break. The ad manager decides whether one is actually due.
+    this.game.ads?.setGameplayActive(false);
+    this.game.ads?.midgame('port');
   }
 
   close() {
@@ -144,6 +150,8 @@ export class PortUI {
     this.game.events.emit('sfx', 'ui');
     this.game.hud.toast('Cast off. Fair winds.', '#6fce62');
     this.game.save();
+    // Back at the helm — gameplay resumes.
+    this.game.ads?.setGameplayActive(this.game.state === 'playing');
   }
 
   _rng(salt = 0) {
