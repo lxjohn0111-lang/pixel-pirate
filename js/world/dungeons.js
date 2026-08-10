@@ -381,6 +381,8 @@ export class Dungeon extends Boarding {
       game.events.emit('player:changed');
       game.hud.toast('You barely crawl back to the daylight...', '#e05a4a');
       game._offerCrewRescue();
+      // Barely is the operative word — go back down wounded and you stay.
+      game.mortality.nearDeath('depths');
     }
   }
 

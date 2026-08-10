@@ -46,6 +46,9 @@ const EXPRESSIONS = {
   shock:     { browY: -3, browTilt: 0, eyeOpen: 1.4, mouth: 'open' },
   sly:       { browY: -1, browTilt: -1, eyeOpen: 0.5, mouth: 'smirk' },
   hollow:    { browY: 0, browTilt: 0, eyeOpen: 1.2, mouth: 'none' },
+  // For the dead: eyes shut, jaw slack. Deliberately not a sad face —
+  // it should read as gone, not upset.
+  gone:      { browY: 1, browTilt: 1, eyeOpen: 0.06, mouth: 'line' },
 };
 
 /* ------------------------------------------------------------------ */

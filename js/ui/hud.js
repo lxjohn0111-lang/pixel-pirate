@@ -20,6 +20,7 @@ const NOTE_ICONS = {
   crown: '♛',
   warn: '!',
   good: '✓',
+  danger: '☠',
 };
 
 /**
@@ -53,6 +54,14 @@ export class HUD {
           <div class="hud-bar hp-bar" title="Health"><div class="fill"></div><span class="bar-text"></span></div>
           <div class="hud-bar xp-bar" title="Experience"><div class="fill"></div><span class="bar-text lvl-text"></span></div>
           <div class="hud-bar hull-bar" title="Ship hull"><div class="fill"></div><span class="bar-text"></span></div>
+        </div>
+        <div class="wound-badge hidden" title="Take another beating and this captain is finished">
+          <span class="wound-icon">🩸</span>
+          <div class="wound-body">
+            <b>Bleeding out</b>
+            <span class="wound-sub">Heal to full to bind it</span>
+          </div>
+          <span class="wound-clock"></span>
         </div>
       </div>
       <div class="hud-sidebtns">
@@ -447,6 +456,19 @@ export class HUD {
       this.relicArrow.style.transform = `translate(-50%,-50%) rotate(${(a * 180) / Math.PI + 90}deg)`;
     } else {
       this.relicArrow.classList.add('hidden');
+    }
+
+    // One blow from the grave. Loud on purpose — nobody should ever die
+    // without having been told, in the corner of their eye, that they
+    // were about to.
+    const wound = game.mortality;
+    this.woundBadge ??= this.el.querySelector('.wound-badge');
+    if (wound?.wounded) {
+      this.woundBadge.classList.remove('hidden');
+      this.woundBadge.querySelector('.wound-clock').textContent =
+        `${Math.max(0, Math.ceil(wound.woundLeft))}s`;
+    } else {
+      this.woundBadge.classList.add('hidden');
     }
 
     // legend health bar

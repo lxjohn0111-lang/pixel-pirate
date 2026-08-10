@@ -58,6 +58,8 @@ import { Homestead } from '../world/homestead.js';
 import { LogUI } from '../ui/logUI.js';
 import { HomeUI } from '../ui/homeUI.js';
 import { AdManager } from '../ads/ads.js';
+import { Mortality } from './mortality.js';
+import { DeathUI } from '../ui/deathUI.js';
 import { Dialogue } from '../story/dialogue.js';
 import { Story } from '../story/story.js';
 import { Guide } from '../story/guide.js';
@@ -87,7 +89,14 @@ export class Game {
   boot() {
     const save = SaveManager.load();
     if (save?.settings) Object.assign(this.settings, save.settings);
-    const creator = new CharacterCreator(this.uiRoot, save, (appearance, useSave) => {
+    // A dead captain stays dead across reloads. The epitaph is the whole
+    // screen, and its one button wipes the save and boots the creator.
+    if (save?.dead) {
+      new DeathUI(this.uiRoot, this).showFromSave(save.dead);
+      return;
+    }
+    const creator = new CharacterCreator(this.uiRoot, save, (appearance, useSave, name) => {
+      this.captainName = name;
       this.start(appearance, useSave ? save : null);
     });
     creator.show();
@@ -95,6 +104,7 @@ export class Game {
 
   start(appearance, save) {
     this.appearance = appearance;
+    this.captainName = this.captainName || save?.captainName || 'The Captain';
     this.seed = save?.seed ?? ((Math.random() * 0xffffffff) >>> 0);
     this.resources = save?.resources ?? { coins: 0, wood: 0 };
 
@@ -159,6 +169,9 @@ export class Game {
     // after everything they read, so their goal checks never see a
     // half-built game.
     this.mainQuest = this.registerSystem(new MainQuest(this, save?.mainQuest));
+    // The one system that can end a run. Registered last so that when it
+    // asks "what did this captain do", every scoreboard already exists.
+    this.mortality = this.registerSystem(new Mortality(this, save?.mortality));
     if (this.prestige > 0) this.cosmetics.unlock('flag', 'legend');
 
     // First voyage: a captain needs the basics.
@@ -186,6 +199,8 @@ export class Game {
     this.lootUI = new LootUI(this.uiRoot, this);
     this.logUI = new LogUI(this.uiRoot, this);
     this.homeUI = new HomeUI(this.uiRoot, this);
+    this.deathUI = new DeathUI(this.uiRoot, this);
+    this.events.on('player:died', (e) => this.deathUI.show(e.summary));
     // The campaign gives the world a reason and doubles as the tutorial.
     this.dialogue = new Dialogue(this.uiRoot, this);
     this.story = new Story(this, save?.story);
@@ -261,7 +276,7 @@ export class Game {
   /** True while a blocking dialog is up (loot, port, recruit, ad...). */
   get uiBlocked() {
     return this.lootUI?.isOpen || this.portUI?.isOpen || this.homeUI?.isOpen
-      || this.ads?.isOpen || this.dialogue?.isOpen;
+      || this.ads?.isOpen || this.dialogue?.isOpen || this.deathUI?.isOpen;
   }
 
   /** True while the ship is tied up at a quay and the world is on hold. */
@@ -509,6 +524,9 @@ export class Game {
       this.events.emit('resources:changed', { ...this.resources });
       this.hud.toast(`Thrown back to your ship!${lost > 0 ? ` Lost ${lost} gold.` : ''}`, '#e05a4a');
       this._offerCrewRescue();
+      // Rallying (the offer above) means you never went down at all; this
+      // is the path where they carried you off. Twice is fatal.
+      this.mortality.nearDeath('deck');
     };
 
     this.ads.offer({
@@ -814,6 +832,8 @@ export class Game {
       this.events.emit('resources:changed', { ...this.resources });
       this.events.emit('playership:damaged', { hull: this.shipState.hull });
       this.hud.toast(`The crew barely kept her afloat!${lost > 0 ? ` Lost ${lost} gold.` : ''}`, '#e05a4a');
+      // Going down is survivable — twice in a row is not.
+      this.mortality.nearDeath('sea');
     };
 
     this.ads.offer({
@@ -841,6 +861,11 @@ export class Game {
     SaveManager.save({
       seed: this.seed,
       appearance: this.appearance,
+      captainName: this.captainName,
+      // Present only once, when a run ends. Its presence is what makes
+      // boot show the epitaph instead of handing the ship back.
+      dead: this.mortality?.record ?? undefined,
+      mortality: this.mortality?.serialize(),
       ship: this.ship.serialize(),
       resources: { coins: this.resources.coins, wood: 0 },
       time: this.dayNight.serialize(),

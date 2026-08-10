@@ -1,0 +1,242 @@
+// The end of a captain, and the start of the next one.
+//
+// Death is rare and earned (see core/mortality.js), so the screen it
+// opens is written to be worth reaching: the captain's own face, what
+// killed them, what they actually did with their run, and the roll of
+// everyone who came before. Then one clear road out — a new life, new
+// pirate, new world, nothing carried over.
+//
+// The screen has two modes. `show()` runs at the moment of death, where
+// a rewarded ad can still buy one last breath. `showFromSave()` runs at
+// boot when the last save is a dead one, where the run is long over and
+// the only thing left is to begin again.
+
+import { portraitCanvas, faceFromAppearance } from '../render/portrait.js';
+import { CAUSES } from '../core/mortality.js';
+import { Graveyard } from '../meta/graveyard.js';
+import { SaveManager } from '../core/save.js';
+
+/** Which numbers are worth putting on a headstone. */
+const FIELDS = [
+  { key: 'goldEarned', label: 'Gold earned', fmt: (n) => n.toLocaleString() },
+  { key: 'shipsSunk', label: 'Ships sunk' },
+  { key: 'boardingsWon', label: 'Decks taken' },
+  { key: 'bountiesClaimed', label: 'Bounties claimed' },
+  { key: 'dungeonsCleared', label: 'Dungeons cleared' },
+  { key: 'bossesDefeated', label: 'Legends broken' },
+  { key: 'portsVisited', label: 'Ports found' },
+  { key: 'crewLost', label: 'Hands buried' },
+];
+
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
+
+function duration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+export class DeathUI {
+  constructor(uiRoot, game) {
+    this.uiRoot = uiRoot;
+    this.game = game;
+    this.el = null;
+  }
+
+  get isOpen() {
+    return !!this.el;
+  }
+
+  /** Called from the game the moment a captain dies. */
+  show(summary) {
+    const entry = Graveyard.bury(summary);
+    this.game.state = 'dead';
+    this.game.ads?.setGameplayActive(false);
+    this.game.audio?.setMusicMode?.('normal');
+    // The save is kept, but marked — a reload lands back here rather
+    // than quietly resurrecting a captain who is dead.
+    this.game.save();
+    this._render(entry, true);
+  }
+
+  /** Called at boot when the stored voyage ended in a death. */
+  showFromSave(summary) {
+    // The grave was already dug when they died; find it rather than
+    // burying the same captain twice on every reload.
+    const found = Graveyard.list().find((e) => e.diedAt === summary.diedAt);
+    this._render(found ?? { ...summary, number: Graveyard.list().length + 1 }, false);
+  }
+
+  _render(entry, live) {
+    this.close();
+    const cause = CAUSES[entry.cause] ?? CAUSES.sea;
+    const graves = Graveyard.list().filter((e) => e.diedAt !== entry.diedAt).slice(0, 6);
+    const ads = this.game.ads;
+    // One reprieve per life, and only while the body is still warm.
+    const canRevive = live && (this.game.mortality?.reprieves ?? 0) < 1
+      && ads?.ready && !this.game.adsDisabled;
+
+    const el = document.createElement('div');
+    el.className = 'screen death-screen';
+    el.innerHTML = `
+      <div class="death-wrap">
+        <div class="death-card">
+          <div class="death-head">
+            <div class="death-frame"><canvas class="death-portrait" width="64" height="64"></canvas></div>
+            <div class="death-title">
+              <span class="death-eyebrow">Here lies</span>
+              <h1 class="death-name"></h1>
+              <span class="death-cause"></span>
+            </div>
+          </div>
+
+          <p class="death-epitaph"></p>
+
+          <div class="death-rank">
+            <span class="death-rank-main"></span>
+            <span class="death-rank-sub"></span>
+          </div>
+
+          <div class="death-stats"></div>
+
+          <div class="death-actions">
+            ${canRevive ? `
+              <button class="btn btn-primary death-revive">
+                <span class="ad-play">▶</span> One Last Breath
+                <small>Watch an ad — get back up and keep this captain</small>
+              </button>` : ''}
+            <button class="btn ${canRevive ? 'btn-ghost' : 'btn-primary'} death-new">
+              Begin a New Life
+              <small>A new pirate, a new sea, nothing carried over</small>
+            </button>
+          </div>
+          ${graves.length ? `
+            <div class="death-graveyard">
+              <h4>Others who tried</h4>
+              <ul class="grave-list">
+                ${graves.map((g) => `
+                  <li class="grave-row">
+                    <span class="grave-num">${ordinal(g.number)}</span>
+                    <span class="grave-name"></span>
+                    <span class="grave-cause"></span>
+                    <span class="grave-gold">${(g.goldEarned ?? 0).toLocaleString()}g</span>
+                  </li>`).join('')}
+              </ul>
+            </div>` : ''}
+        </div>
+      </div>`;
+    this.uiRoot.appendChild(el);
+    this.el = el;
+
+    // Text goes in as text, never as markup — captain names are typed by
+    // the player and clan names come from their own naming sheet.
+    el.querySelector('.death-name').textContent = entry.name ?? 'The Captain';
+    el.querySelector('.death-cause').textContent = cause.label;
+    el.querySelector('.death-epitaph').textContent = cause.epitaph;
+    graves.forEach((g, i) => {
+      const row = el.querySelectorAll('.grave-row')[i];
+      row.querySelector('.grave-name').textContent = g.name ?? 'Unknown';
+      row.querySelector('.grave-cause').textContent = (CAUSES[g.cause] ?? CAUSES.sea).label;
+    });
+
+    // How far up the ladder they got — the line that stings the most.
+    const rank = el.querySelector('.death-rank-main');
+    const sub = el.querySelector('.death-rank-sub');
+    if (entry.chapter === 'Pirate King') {
+      rank.textContent = 'Pirate King';
+      sub.textContent = 'They finished the climb. The sea took them anyway.';
+    } else {
+      rank.textContent = entry.chapter ?? 'Nobody in particular';
+      sub.textContent = `Chapter ${entry.chapterIndex ?? 1} of ${entry.chapterTotal ?? 8}`
+        + (entry.clan ? ` · ${entry.clan}` : '')
+        + (entry.ports ? ` · ${entry.ports} harbour${entry.ports > 1 ? 's' : ''} held` : '');
+    }
+
+    const stats = el.querySelector('.death-stats');
+    const cells = [
+      ...FIELDS.map((f) => ({
+        label: f.label,
+        value: f.fmt ? f.fmt(entry[f.key] ?? 0) : String(entry[f.key] ?? 0),
+        dim: !(entry[f.key] > 0),
+      })),
+      { label: 'Captain level', value: String(entry.level ?? 1) },
+      { label: 'Last hull', value: entry.hull ?? 'Sloop' },
+      { label: 'Time at sea', value: duration(entry.timePlayed ?? 0) },
+      { label: 'Gold in the hold', value: (entry.gold ?? 0).toLocaleString() },
+    ];
+    for (const c of cells) {
+      const d = document.createElement('div');
+      d.className = `death-stat${c.dim ? ' dim' : ''}`;
+      d.innerHTML = '<b></b><span></span>';
+      d.querySelector('b').textContent = c.value;
+      d.querySelector('span').textContent = c.label;
+      stats.appendChild(d);
+    }
+
+    // The captain's own face, eyes shut.
+    const canvas = el.querySelector('.death-portrait');
+    if (entry.appearance) {
+      canvas.getContext('2d').drawImage(
+        portraitCanvas(faceFromAppearance(entry.appearance), 'gone'), 0, 0);
+    }
+
+    el.querySelector('.death-revive')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      // Straight to play(): the offer *is* this screen, and a global gap
+      // meant for unsolicited pop-ups must not silence the player's own
+      // last request.
+      ads.play('cheatDeath').then((rewarded) => {
+        if (rewarded) this._revive();
+        else btn.disabled = false;
+      });
+    });
+
+    // Burying a captain who still has a breath left deserves one question.
+    const newBtn = el.querySelector('.death-new');
+    newBtn.addEventListener('click', () => {
+      if (canRevive && !newBtn.dataset.sure) {
+        newBtn.dataset.sure = '1';
+        newBtn.classList.add('death-sure');
+        newBtn.innerHTML = 'Yes — bury this captain<small>This cannot be undone</small>';
+        return;
+      }
+      this._newLife();
+    });
+
+    this.game.events.emit('sfx', 'sink');
+  }
+
+  _revive() {
+    this.game.mortality.revive();
+    this.close();
+    this.game.state = 'playing';
+    this.game._lastTs = performance.now();
+    this.game.ads?.setGameplayActive(true);
+    this.game.hud.notify('You are still here', {
+      kind: 'good',
+      detail: 'Half a hull and half a life. Do not waste them.',
+      color: '#6fce62',
+      hold: 7000,
+    });
+    this.game.save();
+  }
+
+  /** New pirate, new sea, nothing carried over — the graveyard aside. */
+  _newLife() {
+    SaveManager.clear();
+    // A boot from nothing is the only way to guarantee "new everything":
+    // every system rebuilds from its own defaults instead of trying to
+    // unwind fifty of them by hand.
+    window.location.reload();
+  }
+
+  close() {
+    this.el?.remove();
+    this.el = null;
+  }
+}

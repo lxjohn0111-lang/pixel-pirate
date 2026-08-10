@@ -40,6 +40,7 @@ const COOLDOWNS = {
   doubleLoot: 90,
   dailyChart: 0, // naturally capped: one extra chart per day
   freeRepair: 120,
+  cheatDeath: 0, // capped by the run itself: one reprieve per life
 };
 
 /** No two offers within this many seconds, whatever the placement. */

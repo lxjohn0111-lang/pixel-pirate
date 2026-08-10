@@ -12,6 +12,15 @@ const FIRST = ['Salty', 'One-Eye', 'Mad', 'Quiet', 'Lucky', 'Iron', 'Red', 'Bone
 const LAST = ['Jack', 'Anne', 'Morgan', 'Flint', 'Reyes', 'Okafor', 'Silva', 'Bram', 'Ashe', 'Crow',
   'Ivarsson', 'Petit', 'Nakamura', 'Vane', 'Teach', 'Mei', 'Delgado', 'Kelly', 'Sparks', 'Hale'];
 
+/**
+ * A pirate name from the same pools the crew are drawn from, so the
+ * captain reads as one of this sea's people rather than a menu entry.
+ * Used by the character creator and the graveyard.
+ */
+export function randomPirateName(rng = Math.random) {
+  return `${pick(rng, FIRST)} ${pick(rng, LAST)}`;
+}
+
 export const TRAITS = {
   fastReload: { name: 'Fast Reload', desc: '+15% cannon reload speed', reload: 0.15 },
   strong:     { name: 'Strong', desc: '+25% melee damage', melee: 0.25 },

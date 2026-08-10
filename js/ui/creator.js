@@ -6,6 +6,7 @@ import {
   OPTIONS, PALETTE, HAIR_COLORS, SKIN_COLORS,
   drawPirate, randomAppearance, defaultAppearance, PIRATE_W, PIRATE_H,
 } from '../render/pirate.js';
+import { randomPirateName } from '../crew/crew.js';
 
 const PREVIEW_SCALE = 7;
 
@@ -17,6 +18,9 @@ export class CharacterCreator {
     this.appearance = existingSave?.appearance
       ? { ...existingSave.appearance }
       : randomAppearance();
+    // A captain with a name is a captain worth burying. The graveyard and
+    // the death screen both read this.
+    this.name = existingSave?.captainName || randomPirateName();
     this.el = null;
     this._raf = 0;
   }
@@ -34,6 +38,10 @@ export class CharacterCreator {
         <div class="creator-body">
           <div class="creator-preview">
             <canvas class="preview-canvas" width="${PIRATE_W * PREVIEW_SCALE + 40}" height="${PIRATE_H * PREVIEW_SCALE + 60}"></canvas>
+            <div class="name-field">
+              <input class="name-input" maxlength="22" spellcheck="false" aria-label="Captain's name">
+              <button class="name-roll" title="Another name" aria-label="Another name">&#x2684;</button>
+            </div>
             <button class="btn btn-ghost randomize">&#x2684; Randomize</button>
           </div>
           <div class="creator-options"></div>
@@ -48,8 +56,17 @@ export class CharacterCreator {
 
     this._buildOptions(el.querySelector('.creator-options'));
 
+    const nameInput = el.querySelector('.name-input');
+    nameInput.value = this.name;
+    nameInput.addEventListener('input', () => { this.name = nameInput.value; });
+    el.querySelector('.name-roll').addEventListener('click', () => {
+      this.name = randomPirateName();
+      nameInput.value = this.name;
+    });
     el.querySelector('.randomize').addEventListener('click', () => {
       this.appearance = randomAppearance();
+      this.name = randomPirateName();
+      nameInput.value = this.name;
       this._refreshOptions();
     });
     el.querySelector('.sail-btn').addEventListener('click', () => {
@@ -75,9 +92,10 @@ export class CharacterCreator {
     cancelAnimationFrame(this._raf);
     this.el.classList.add('fade-out');
     const appearance = useSave ? this.save.appearance : this.appearance;
+    const name = (useSave ? this.save.captainName : this.name)?.trim() || randomPirateName();
     setTimeout(() => {
       this.el.remove();
-      this.onStart(appearance, useSave);
+      this.onStart(appearance, useSave, name);
     }, 450);
   }
 

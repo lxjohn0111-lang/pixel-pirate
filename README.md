@@ -450,6 +450,63 @@ the oldest is pushed out — so a burst of pickups can never bury the one
 line that mattered. Every existing `toast()` call site got this for free;
 the icon is inferred from the colour and wording.
 
+## Death and a new life
+
+A captain can now actually die, and when one does the run is over and a
+new pirate takes the wheel. Death is deliberately hard to reach — it takes
+two disasters, an ignored warning and a refused rescue — so that reaching
+it means something.
+
+### The rule: one blow from the grave
+
+The game already had two moments that *should* have killed you: the hull
+reaching zero, and being cut down on somebody else's deck. Both were
+softened into a bruise, and both stay exactly as they were. What is new is
+the second strike.
+
+1. **Go down once** — sink, lose a boarding, or crawl out of a dungeon
+   beaten — and you are **Bleeding Out**: a red badge under the health
+   bars with a live countdown, a notification spelling out the stakes, and
+   the bosun telling you to your face to patch it.
+2. **Bind it and nothing happens.** Heal to full — food, a surgeon at any
+   port, a night at the homestead, a level-up — or simply survive the
+   2½-minute window, and the state clears with no cost at all.
+3. **Take a second beating while wounded and that captain is finished.**
+
+Every rescue that already existed still saves you: accepting the *Save the
+ship* or *Rally* offer means you never went down, so the ladder never
+starts. Death only ever arrives at the end of a chain the player chose.
+
+### The end of a captain
+
+Death waits for the loot and crew-rescue screens to clear — a last moment
+is not something to stack on a popup — then the world stops and the
+epitaph opens: the captain's own portrait with their eyes shut, what
+killed them, how far up the Pirate King ladder they got, and twelve
+numbers for what they actually did with the run.
+
+Two ways out:
+
+| | |
+| --- | --- |
+| **One Last Breath** | A rewarded ad, **once per life**. Back up at half health with a barely-floating hull, keeping everything. The single most wanted reward in the game, and the only one you can never buy twice. |
+| **Begin a New Life** | Wipes the save and boots the character creator. New pirate, new name, new world seed, new everything. If a breath is still unspent, the button asks once before it buries them. |
+
+A dead save stays dead: reloading the page reopens the epitaph rather than
+quietly handing the ship back.
+
+### The graveyard
+
+The wipe is total, so the names are kept where it cannot reach — their own
+storage key (`js/meta/graveyard.js`), written once per death. The last
+twenty captains are listed under every epitaph with their grave number,
+what took them and what they earned. It gives the next captain nothing;
+it is only a list of people who tried this before them.
+
+Captains are named at creation now — a generated pirate name you can type
+over or re-roll — because a captain with a name is a captain worth
+burying.
+
 ## Ads (CrazyGames SDK)
 
 Ads are integrated through the [CrazyGames HTML5 SDK](https://docs.crazygames.com/sdk/video-ads/)
@@ -535,6 +592,7 @@ js/
 │   ├── constants.js     all tuning values in one place
 │   ├── input.js         keyboard + virtual joystick
 │   ├── camera.js        smooth follow / look-ahead / zoom / shake
+│   ├── mortality.js     bleeding out, death, the end of a run
 │   └── save.js          localStorage persistence
 ├── world/               simulation
 │   ├── world.js         chunk manager + feature-generator registry
@@ -582,6 +640,7 @@ js/
 │   ├── collection.js    the collection book + completion rewards
 │   ├── achievements.js  26 achievements over stats & collection
 │   ├── daily.js         date-seeded daily/weekly content & modifiers
+│   ├── graveyard.js     the roll of fallen captains (survives a wipe)
 │   └── cosmetics.js     sails, flags, figureheads, lanterns
 ├── systems/
 │   ├── fishing.js       biome/time/weather/season fishing
