@@ -18,6 +18,7 @@ import { Particles } from '../render/particles.js';
 import { Renderer } from '../render/renderer.js';
 import { AudioManager } from '../audio/audio.js';
 import { CharacterCreator } from '../ui/creator.js';
+import { MainMenu } from '../ui/menu.js';
 import { HUD } from '../ui/hud.js';
 import { PauseMenu } from '../ui/pause.js';
 // Part 2
@@ -95,11 +96,19 @@ export class Game {
       new DeathUI(this.uiRoot, this).showFromSave(save.dead);
       return;
     }
-    const creator = new CharacterCreator(this.uiRoot, save, (appearance, useSave, name) => {
-      this.captainName = name;
-      this.start(appearance, useSave ? save : null);
+    // The menu owns the first decision. Continue goes straight to sea;
+    // character creation waits behind New Game, where it belongs.
+    const menu = new MainMenu(this.uiRoot, save, {
+      onContinue: () => this.start(save.appearance, save),
+      onNew: () => {
+        const creator = new CharacterCreator(this.uiRoot, null, (appearance, _useSave, name) => {
+          this.captainName = name;
+          this.start(appearance, null);
+        }, () => menu.show());
+        creator.show();
+      },
     });
-    creator.show();
+    menu.show();
   }
 
   start(appearance, save) {

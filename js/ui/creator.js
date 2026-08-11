@@ -11,10 +11,12 @@ import { randomPirateName } from '../crew/crew.js';
 const PREVIEW_SCALE = 7;
 
 export class CharacterCreator {
-  constructor(uiRoot, existingSave, onStart) {
+  constructor(uiRoot, existingSave, onStart, onBack) {
     this.uiRoot = uiRoot;
     this.save = existingSave;
     this.onStart = onStart;
+    /** Set when the creator was opened from the main menu. */
+    this.onBack = onBack;
     this.appearance = existingSave?.appearance
       ? { ...existingSave.appearance }
       : randomAppearance();
@@ -32,7 +34,8 @@ export class CharacterCreator {
     el.innerHTML = `
       <div class="creator-inner">
         <header class="creator-header">
-          <h1>Sea of Rogues</h1>
+          ${this.onBack ? '<button class="btn btn-ghost back-btn">&#x2039; Back</button>' : ''}
+          <h1>Your Captain</h1>
           <p class="tagline">Every legend starts with one sail.</p>
         </header>
         <div class="creator-body">
@@ -72,6 +75,12 @@ export class CharacterCreator {
     el.querySelector('.sail-btn').addEventListener('click', () => {
       if (hasSave && !confirm('Start a new voyage? Your current captain and progress will be lost.')) return;
       this._finish(false);
+    });
+    // Reached from the menu, so it has to lead back there too.
+    el.querySelector('.back-btn')?.addEventListener('click', () => {
+      cancelAnimationFrame(this._raf);
+      this.el.remove();
+      this.onBack();
     });
     el.querySelector('.continue-btn')?.addEventListener('click', () => this._finish(true));
 

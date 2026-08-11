@@ -450,6 +450,29 @@ the oldest is pushed out — so a burst of pickups can never bury the one
 line that mattered. Every existing `toast()` call site got this for free;
 the icon is inferred from the colour and wording.
 
+## The main menu
+
+The first screen is a menu, not a form. Character creation is a whole
+screen of choices, so it waits behind **New Game** rather than standing
+between a first-time player and the sea; **Continue Voyage** goes straight
+to the helm with no stop in between.
+
+Three things do the work:
+
+- **The backdrop is not a picture of the game, it is the game.** The same
+  `Water`, `DayNight` and `Weather` systems that run the ocean at sea run
+  here, with a real fleet sailing across it, wakes and gulls and all —
+  rendered to the same 1/3-resolution pixel backbuffer. Nothing on the
+  screen promises something the game does not deliver.
+- **One primary action**, sized and coloured so it cannot be missed. A
+  returning captain gets Continue with **their own name, level, purse,
+  hull and current objective** printed on the button — the strongest
+  possible reason to press it. A new player gets *Set Sail*.
+- **Everything else is small**: five chips saying what the game is, a
+  *How to Play* sheet, and *The Graveyard* once there is somebody in it.
+
+The creator gained a **Back** button, so New Game is never a trapdoor.
+
 ## Death and a new life
 
 A captain can now actually die, and when one does the run is over and a
@@ -670,7 +693,7 @@ js/
 │   ├── decor.js         swaying island decorations
 │   └── particles.js     particles + floating text
 ├── audio/audio.js       WebAudio soundscape + generative music
-├── ui/                  DOM screens: creator, HUD, pause menu
+├── ui/                  DOM screens: menu, creator, HUD, pause, panels
 └── util/                seeded random, value noise, math helpers
 ```
 
