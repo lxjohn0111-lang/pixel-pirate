@@ -133,9 +133,9 @@ export class Mortality {
   }
 
   /**
-   * Undo a death — the one reprieve a run gets, sold for an ad. Handed
-   * back alive but not comfortable: half health, a barely-floating hull,
-   * and no wound, so the next mistake starts the whole ladder again.
+   * Undo a death — the one reprieve a run gets, sold for an ad. It has to
+   * be worth the ad, so it is a clean slate: full health, a whole hull,
+   * whole sails and no wound. Everything the captain had is still theirs.
    */
   revive() {
     const { game } = this;
@@ -145,9 +145,9 @@ export class Mortality {
     this.reprieves++;
     this.wounded = false;
     this.woundLeft = 0;
-    game.player.health = Math.round(game.player.maxHealth * 0.5);
-    game.shipState.hull = Math.max(game.shipState.hull, Math.round(game.shipState.maxHull * 0.4));
-    game.shipState.sailHp = Math.max(game.shipState.sailHp, Math.round(game.shipState.maxSail * 0.4));
+    game.player.health = game.player.maxHealth;
+    game.shipState.hull = game.shipState.maxHull;
+    game.shipState.sailHp = game.shipState.maxSail;
     game.events.emit('player:changed');
     game.events.emit('playership:damaged', { hull: game.shipState.hull });
     game.events.emit('player:revived', {});

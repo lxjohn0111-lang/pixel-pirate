@@ -3,13 +3,20 @@
 // Death is rare and earned (see core/mortality.js), so the screen it
 // opens is written to be worth reaching: the captain's own face, what
 // killed them, what they actually did with their run, and the roll of
-// everyone who came before. Then one clear road out — a new life, new
-// pirate, new world, nothing carried over.
+// everyone who came before.
 //
-// The screen has two modes. `show()` runs at the moment of death, where
-// a rewarded ad can still buy one last breath. `showFromSave()` runs at
-// boot when the last save is a dead one, where the run is long over and
-// the only thing left is to begin again.
+// It runs in two stages, because the two decisions are different:
+//
+//   FALLEN — you are down, but not written off. One rewarded ad puts you
+//            back on your feet at full health with a whole ship. Or you
+//            can accept it, which is a choice the player makes, not one
+//            the game makes for them.
+//   OVER   — game over. The run is closed, and the only road out is a
+//            new pirate, a new sea and nothing carried over.
+//
+// A captain with no reprieve left goes straight to OVER; there is no
+// choice to offer. Booting on a dead save opens OVER too — the run ended
+// long ago and the ad moment has passed with it.
 
 import { portraitCanvas, faceFromAppearance } from '../render/portrait.js';
 import { CAUSES } from '../core/mortality.js';
@@ -45,6 +52,9 @@ export class DeathUI {
     this.uiRoot = uiRoot;
     this.game = game;
     this.el = null;
+    this.entry = null;
+    this.stage = null;
+    this.live = false;
   }
 
   get isOpen() {
@@ -53,14 +63,15 @@ export class DeathUI {
 
   /** Called from the game the moment a captain dies. */
   show(summary) {
-    const entry = Graveyard.bury(summary);
+    this.entry = Graveyard.bury(summary);
+    this.live = true;
     this.game.state = 'dead';
     this.game.ads?.setGameplayActive(false);
     this.game.audio?.setMusicMode?.('normal');
     // The save is kept, but marked — a reload lands back here rather
     // than quietly resurrecting a captain who is dead.
     this.game.save();
-    this._render(entry, true);
+    this._stage(this._canRevive() ? 'fallen' : 'over');
   }
 
   /** Called at boot when the stored voyage ended in a death. */
@@ -68,27 +79,41 @@ export class DeathUI {
     // The grave was already dug when they died; find it rather than
     // burying the same captain twice on every reload.
     const found = Graveyard.list().find((e) => e.diedAt === summary.diedAt);
-    this._render(found ?? { ...summary, number: Graveyard.list().length + 1 }, false);
+    this.entry = found ?? { ...summary, number: Graveyard.list().length + 1 };
+    this.live = false;
+    this._stage('over');
   }
 
-  _render(entry, live) {
+  /** One reprieve per life, and only while the body is still warm. */
+  _canRevive() {
+    return this.live
+      && (this.game.mortality?.reprieves ?? 0) < 1
+      && !!this.game.ads?.ready
+      && !this.game.adsDisabled;
+  }
+
+  _stage(stage) {
+    this.stage = stage;
+    this._render();
+  }
+
+  _render() {
     this.close();
+    const entry = this.entry;
+    const over = this.stage === 'over';
     const cause = CAUSES[entry.cause] ?? CAUSES.sea;
     const graves = Graveyard.list().filter((e) => e.diedAt !== entry.diedAt).slice(0, 6);
-    const ads = this.game.ads;
-    // One reprieve per life, and only while the body is still warm.
-    const canRevive = live && (this.game.mortality?.reprieves ?? 0) < 1
-      && ads?.ready && !this.game.adsDisabled;
 
     const el = document.createElement('div');
-    el.className = 'screen death-screen';
+    el.className = `screen death-screen${over ? ' is-over' : ''}`;
     el.innerHTML = `
       <div class="death-wrap">
+        ${over ? '<div class="game-over-band"><span>Game Over</span></div>' : ''}
         <div class="death-card">
           <div class="death-head">
             <div class="death-frame"><canvas class="death-portrait" width="64" height="64"></canvas></div>
             <div class="death-title">
-              <span class="death-eyebrow">Here lies</span>
+              <span class="death-eyebrow">${over ? 'That was the end of' : 'Here lies'}</span>
               <h1 class="death-name"></h1>
               <span class="death-cause"></span>
             </div>
@@ -104,15 +129,19 @@ export class DeathUI {
           <div class="death-stats"></div>
 
           <div class="death-actions">
-            ${canRevive ? `
+            ${over ? `
+              <button class="btn btn-primary death-new">
+                Try Again
+                <small>A new pirate, a new sea, nothing carried over</small>
+              </button>` : `
               <button class="btn btn-primary death-revive">
                 <span class="ad-play">▶</span> One Last Breath
-                <small>Watch an ad — get back up and keep this captain</small>
-              </button>` : ''}
-            <button class="btn ${canRevive ? 'btn-ghost' : 'btn-primary'} death-new">
-              Begin a New Life
-              <small>A new pirate, a new sea, nothing carried over</small>
-            </button>
+                <small>Watch an ad — back on your feet at full health, ship and all</small>
+              </button>
+              <button class="btn btn-ghost death-accept">
+                Accept Your Fate
+                <small>Their story ends here</small>
+              </button>`}
           </div>
           ${graves.length ? `
             <div class="death-graveyard">
@@ -190,36 +219,34 @@ export class DeathUI {
       // Straight to play(): the offer *is* this screen, and a global gap
       // meant for unsolicited pop-ups must not silence the player's own
       // last request.
-      ads.play('cheatDeath').then((rewarded) => {
+      this.game.ads.play('cheatDeath').then((rewarded) => {
         if (rewarded) this._revive();
-        else btn.disabled = false;
+        else btn.disabled = false;   // no ad, no reprieve spent — try again
       });
     });
 
-    // Burying a captain who still has a breath left deserves one question.
-    const newBtn = el.querySelector('.death-new');
-    newBtn.addEventListener('click', () => {
-      if (canRevive && !newBtn.dataset.sure) {
-        newBtn.dataset.sure = '1';
-        newBtn.classList.add('death-sure');
-        newBtn.innerHTML = 'Yes — bury this captain<small>This cannot be undone</small>';
-        return;
-      }
-      this._newLife();
+    // Calling it is the player's decision, so it is a button of its own
+    // rather than a confirmation buried in the restart.
+    el.querySelector('.death-accept')?.addEventListener('click', () => {
+      this.game.events.emit('sfx', 'sink');
+      this._stage('over');
     });
 
-    this.game.events.emit('sfx', 'sink');
+    el.querySelector('.death-new')?.addEventListener('click', () => this._newLife());
+
+    if (!over) this.game.events.emit('sfx', 'sink');
   }
 
+  /** The reprieve: whole again, ship and all, and straight back to it. */
   _revive() {
     this.game.mortality.revive();
     this.close();
     this.game.state = 'playing';
     this.game._lastTs = performance.now();
     this.game.ads?.setGameplayActive(true);
-    this.game.hud.notify('You are still here', {
+    this.game.hud.notify('Back on your feet', {
       kind: 'good',
-      detail: 'Half a hull and half a life. Do not waste them.',
+      detail: 'Full health and a whole ship. Do not waste them.',
       color: '#6fce62',
       hold: 7000,
     });

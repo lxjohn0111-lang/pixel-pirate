@@ -485,15 +485,27 @@ epitaph opens: the captain's own portrait with their eyes shut, what
 killed them, how far up the Pirate King ladder they got, and twelve
 numbers for what they actually did with the run.
 
-Two ways out:
+It runs in **two stages**, because the two decisions are different.
+
+**Fallen** — you are down, but not written off:
 
 | | |
 | --- | --- |
-| **One Last Breath** | A rewarded ad, **once per life**. Back up at half health with a barely-floating hull, keeping everything. The single most wanted reward in the game, and the only one you can never buy twice. |
-| **Begin a New Life** | Wipes the save and boots the character creator. New pirate, new name, new world seed, new everything. If a breath is still unspent, the button asks once before it buries them. |
+| **One Last Breath** | A rewarded ad, **once per life**. Back on your feet at **full health with a whole hull and whole sails**, keeping everything you had. The single most wanted reward in the game, and the only one you can never buy twice. |
+| **Accept Your Fate** | Calling it is the player's decision, so it is a button of its own rather than a confirmation buried in the restart. |
 
-A dead save stays dead: reloading the page reopens the epitaph rather than
-quietly handing the ship back.
+**Game Over** — reached by accepting, or straight away if the reprieve is
+already spent. The screen says so before anything else does, and offers
+one road out:
+
+| | |
+| --- | --- |
+| **Try Again** | Wipes the save and boots the character creator. New pirate, new name, new world seed, new everything. |
+
+If an ad fails to fill, no reprieve is spent and the button comes back —
+a failed ad never costs a captain. A dead save stays dead: reloading the
+page reopens the Game Over screen rather than quietly handing the ship
+back.
 
 ### The graveyard
 
@@ -533,6 +545,7 @@ the player*, never a toll:
 | --------- | ------ | ------ |
 | Save the ship | Hull reaches 0 | Full hull + sails, and keep the 15% gold you'd have lost |
 | Save the crew | After a boarding or dungeon where crew fell | Revive them — otherwise the loss is permanent |
+| One last breath | On the death screen, once per life | Get back up with full health, hull and sails, keeping everything |
 | Rally | Driven off an enemy deck | Full health, and keep the 10% gold |
 | Double the haul | Inside the loot popup, rare+ or 40+ gold only | Twice the gold and items |
 | Free careening | At a port with a damaged hull | Full repair, no gold |

@@ -4804,6 +4804,38 @@ canvas.clan-badge {
 
 .death-wrap { width: min(640px, 100%); }
 
+/* Game over: the run is closed, and the screen says so before anything
+   else does. */
+.death-screen.is-over {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(20, 20, 26, 0.6), transparent 60%),
+    rgba(3, 4, 8, 0.97);
+}
+
+.game-over-band {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.game-over-band span {
+  display: inline-block;
+  padding: 6px 22px;
+  border: 1px solid rgba(201, 72, 60, 0.55);
+  border-radius: 4px;
+  background: rgba(90, 22, 20, 0.35);
+  color: #ff9b8a;
+  font-size: 18px;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.7);
+  animation: overIn 0.7s ease both;
+}
+
+@keyframes overIn {
+  from { opacity: 0; transform: translateY(-8px); letter-spacing: 16px; }
+  to { opacity: 1; transform: none; letter-spacing: 8px; }
+}
+
 .death-card {
   border: 1px solid rgba(201, 160, 106, 0.4);
   border-radius: 6px;
@@ -5004,11 +5036,12 @@ canvas.clan-badge {
 
 @media (max-width: 700px) {
   .death-name { font-size: 21px; }
+  .game-over-band span { font-size: 14px; letter-spacing: 5px; }
   .wound-badge { max-width: 190px; }
   .wound-sub { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .wound-badge { animation: none; }
-  .death-screen { animation: none; }
+  .death-screen, .game-over-band span { animation: none; }
 }
