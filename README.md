@@ -617,6 +617,35 @@ present — local dev, itch.io, the single-file build — the manager falls
 back to a **clearly labelled simulation** so the flow stays testable; it
 never pretends a real ad was shown, and never silently rewards as if one had been.
 
+### Saving through the SDK
+
+On CrazyGames the save goes through the SDK's **data module**
+(`js/core/storage.js`), which is what the platform expects: plain
+localStorage is not reliable inside their frame and is unavailable
+outright in some of their clients, so a game that only writes to
+localStorage can quietly lose a player's whole voyage. Everywhere else
+this is localStorage exactly as before.
+
+Two rules keep that simple:
+
+- **Reads are always synchronous.** The game asks for the save while it
+  boots and cannot wait, so reads come from an in-memory cache backed by
+  localStorage. The SDK is never read on the hot path — which also means
+  it does not matter whether its `getItem` is synchronous or a promise.
+- **Writes go everywhere**: cache, SDK data module, and localStorage as a
+  local mirror. Each leg is guarded on its own, so a full disk or a
+  missing module can never take the other two down with it.
+
+The handshake is asynchronous, so reconciliation runs *alongside* boot
+rather than blocking it. The menu appears instantly from local data; if
+the platform turns out to hold a voyage this device does not, it is
+adopted and the menu redraws with Continue on it. A player who started
+before any of this existed has their local save pushed up the first time
+they load. Both the save and the graveyard ride along.
+
+`js/core/cgsdk.js` owns the one `SDK.init()` handshake, memoized, so
+saving and advertising share it rather than racing each other.
+
 ## Architecture
 
 ```
@@ -629,7 +658,9 @@ js/
 │   ├── input.js         keyboard + virtual joystick
 │   ├── camera.js        smooth follow / look-ahead / zoom / shake
 │   ├── mortality.js     bleeding out, death, the end of a run
-│   └── save.js          localStorage persistence
+│   ├── cgsdk.js         the one CrazyGames SDK handshake, memoized
+│   ├── storage.js       CrazyGames data module, localStorage elsewhere
+│   └── save.js          the save blob
 ├── world/               simulation
 │   ├── world.js         chunk manager + feature-generator registry
 │   ├── island.js        deterministic island shapes, biomes, decor

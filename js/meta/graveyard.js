@@ -9,14 +9,16 @@
 // It costs the next captain nothing and grants them nothing. It is only
 // a list of people who tried this before them.
 
-const KEY = 'seaOfRogues.graveyard.v1';
+import { Storage } from '../core/storage.js';
+
+const KEY = Storage.track('seaOfRogues.graveyard.v1');
 const MAX = 20;
 
 export const Graveyard = {
   /** Most recent first. Never throws — a corrupt list is an empty one. */
   list() {
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = Storage.getItem(KEY);
       if (!raw) return [];
       const data = JSON.parse(raw);
       return Array.isArray(data) ? data : [];
@@ -31,7 +33,7 @@ export const Graveyard = {
     const entry = { ...summary, number: (all[0]?.number ?? 0) + 1 };
     all.unshift(entry);
     try {
-      localStorage.setItem(KEY, JSON.stringify(all.slice(0, MAX)));
+      Storage.setItem(KEY, JSON.stringify(all.slice(0, MAX)));
     } catch {
       /* storage full — the captain is no less dead */
     }
@@ -40,7 +42,7 @@ export const Graveyard = {
 
   clear() {
     try {
-      localStorage.removeItem(KEY);
+      Storage.removeItem(KEY);
     } catch {
       /* ignore */
     }

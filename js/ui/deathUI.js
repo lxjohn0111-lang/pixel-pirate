@@ -255,7 +255,11 @@ export class DeathUI {
 
   /** New pirate, new sea, nothing carried over — the graveyard aside. */
   _newLife() {
-    SaveManager.clear();
+    // Through the game so the save is latched shut: the reload below
+    // fires beforeunload, and an unlatched save() there would put the
+    // dead captain straight back.
+    if (this.game.world) this.game.wipeSave();
+    else SaveManager.clear();
     // A boot from nothing is the only way to guarantee "new everything":
     // every system rebuilds from its own defaults instead of trying to
     // unwind fifty of them by hand.

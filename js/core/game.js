@@ -8,6 +8,7 @@ import { EventBus } from './events.js';
 import { Input } from './input.js';
 import { Camera } from './camera.js';
 import { SaveManager } from './save.js';
+import { Storage } from './storage.js';
 import { World } from '../world/world.js';
 import { DayNight } from '../world/daynight.js';
 import { Weather } from '../world/weather.js';
@@ -88,11 +89,25 @@ export class Game {
   }
 
   boot() {
+    // The platform's copy of the save arrives a moment after the page
+    // does, so the menu is drawn from local data straight away and
+    // redrawn if CrazyGames turns out to hold a voyage this device does
+    // not. On every other host this resolves to nothing and never fires.
+    if (!this._storageInit) {
+      this._storageInit = true;
+      Storage.init(() => {
+        if (this.state !== 'boot') return;   // already sailing; too late to matter
+        this._menu?.hide();
+        this._menu = null;
+        this.boot();
+      });
+    }
     const save = SaveManager.load();
     if (save?.settings) Object.assign(this.settings, save.settings);
     // A dead captain stays dead across reloads. The epitaph is the whole
     // screen, and its one button wipes the save and boots the creator.
     if (save?.dead) {
+      this._menu = null;
       new DeathUI(this.uiRoot, this).showFromSave(save.dead);
       return;
     }
@@ -108,6 +123,7 @@ export class Game {
         creator.show();
       },
     });
+    this._menu = menu;
     menu.show();
   }
 
@@ -865,8 +881,21 @@ export class Game {
 
   /* ---- persistence ------------------------------------------------------ */
 
+  /**
+   * Forget this voyage for good.
+   *
+   * Clearing alone is not enough: the page reloads straight after, and
+   * both the visibilitychange and beforeunload handlers call save() on
+   * the way out, which would write the wiped captain right back. The
+   * latch is what makes "nothing carried over" actually true.
+   */
+  wipeSave() {
+    this._wiped = true;
+    SaveManager.clear();
+  }
+
   save() {
-    if (!this.world) return;
+    if (!this.world || this._wiped) return;
     SaveManager.save({
       seed: this.seed,
       appearance: this.appearance,

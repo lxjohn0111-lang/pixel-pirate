@@ -29,8 +29,7 @@
 // manager runs in clearly-labelled simulation mode so the flow stays
 // testable; it never pretends a real ad was shown.
 
-const SDK_URL = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
-const SDK_WAIT_MS = 4000;
+import { CG } from '../core/cgsdk.js';
 
 /** Per-placement cooldowns in seconds. */
 const COOLDOWNS = {
@@ -95,44 +94,19 @@ export class AdManager {
   /* ------------------------------------------------------------------ */
 
   async init() {
-    try {
-      const sdk = await this._waitForSdk();
-      await sdk.init();
+    // The handshake is shared with the save system (core/cgsdk.js), so
+    // SDK.init() happens once no matter who asks first.
+    const sdk = await CG.get();
+    if (sdk?.ad) {
       this.sdk = sdk;
       this.ready = true;
       this.simulated = false;
-    } catch {
+    } else {
       // No SDK here (local dev, offline, single-file build, blocked by
       // CSP). Keep the feature usable and honest about it.
       this.ready = true;
       this.simulated = true;
     }
-  }
-
-  _waitForSdk() {
-    return new Promise((resolve, reject) => {
-      if (window.CrazyGames?.SDK) {
-        resolve(window.CrazyGames.SDK);
-        return;
-      }
-      // The host page supplies the script (see index.html). We only wait
-      // for it — injecting it ourselves would trip the Content-Security-
-      // Policy on strict hosts and log noise for no benefit.
-      if (!document.querySelector(`script[src="${SDK_URL}"]`)) {
-        reject(new Error('CrazyGames SDK script not present on the page'));
-        return;
-      }
-      const started = Date.now();
-      const poll = setInterval(() => {
-        if (window.CrazyGames?.SDK) {
-          clearInterval(poll);
-          resolve(window.CrazyGames.SDK);
-        } else if (Date.now() - started > SDK_WAIT_MS) {
-          clearInterval(poll);
-          reject(new Error('CrazyGames SDK unavailable'));
-        }
-      }, 120);
-    });
   }
 
   /** CrazyGames wants to know when the player is actually playing. */
