@@ -646,6 +646,31 @@ they load. Both the save and the graveyard ride along.
 `js/core/cgsdk.js` owns the one `SDK.init()` handshake, memoized, so
 saving and advertising share it rather than racing each other.
 
+## Shipping to CrazyGames
+
+The multi-file layout is the nicer thing to work on and the worse thing
+to hand to a portal: loose `css/` and `js/` folders can land somewhere
+other than where `index.html` looks for them, and a host that serves
+`.js` with the wrong content type refuses `type="module"` outright.
+Either one is a white screen with no error the uploader can see.
+
+So the shipped build is **one self-contained `index.html`** — stylesheet
+and whole game inlined, nothing to fetch but the CrazyGames SDK. No
+folder to misplace, and no module MIME type to get wrong (the bundler
+emits a plain script with its own module registry, so there is no
+`type="module"` at all).
+
+```sh
+node tools/bundle.mjs          # js/**/*.js -> dist/bundle.js
+node tools/verify.mjs          # every import resolves
+node tools/build-crazygames.mjs  # -> dist/index.html
+cd dist && zip ../sea-of-rogues.zip index.html
+```
+
+`index.html` must sit at the **root** of the ZIP. Note that GitHub's
+"Download ZIP" wraps everything in a folder, which is exactly the layout
+that fails.
+
 ## Architecture
 
 ```
