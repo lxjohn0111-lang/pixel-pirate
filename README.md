@@ -671,6 +671,29 @@ cd dist && zip ../sea-of-rogues.zip index.html
 "Download ZIP" wraps everything in a folder, which is exactly the layout
 that fails.
 
+### A gameplay clip
+
+`tools/record-gameplay.mjs` records a 19-second silent MP4 for store
+pages and portals. The menu and the character creator are walked through
+*before* recording begins — frames come from CDP's screencast, which is
+independent of the page's lifetime — so the first frame of the clip is
+already gameplay and nothing but the game is ever in shot.
+
+It dresses the set (a fully fitted man-o-war, golden-hour light, the
+biggest green island within reach), then plays a scripted run: sailing
+the coast, a broadside battle with clan-tagged raiders, and boarding an
+enemy deck, still swinging when the clip ends. Pop-ups are stubbed out
+for the take, so no loot modal or notification ever lands on camera.
+
+```sh
+python3 -m http.server 8630 &
+FFMPEG=/path/to/ffmpeg node tools/record-gameplay.mjs   # -> dist/
+```
+
+Frames are resampled to exactly 30 fps × 19 s and encoded with no audio
+track at all. It also writes a contact sheet so the take can be judged
+without playing it back.
+
 ## Architecture
 
 ```
